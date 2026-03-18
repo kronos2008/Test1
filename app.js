@@ -1,7 +1,6 @@
-/** * Cinema Party Engine v2.2 - Stable Edition
- */
+/** * Cinema Party Engine v2.3 - Stable GitHub Edition */
 
-// Резервный загрузчик PeerJS на случай сбоя сети
+// Резервный загрузчик PeerJS, если основной скрипт в head заблокирован
 (function checkPeerLib() {
     if (typeof Peer === 'undefined') {
         const s = document.createElement('script');
@@ -28,7 +27,7 @@ function onYouTubeIframeAPIReady() {
     checkUrlParams(); 
 }
 
-// 2. Проверка входа через Telegram
+// 2. Проверка входа через Telegram (startapp)
 function checkUrlParams() {
     const startParam = tg?.initDataUnsafe?.start_param;
     if (startParam && startParam.startsWith('room_')) {
@@ -43,7 +42,8 @@ function startMovie() {
     const videoId = extractVideoID(url);
 
     if (!videoId) {
-        if (tg) tg.showAlert("Введите корректную ссылку!");
+        if (tg) tg.showAlert("Введите рабочую ссылку на YouTube!");
+        else alert("Некорректная ссылка!");
         return;
     }
 
@@ -61,7 +61,7 @@ function joinRoom(hostId) {
 // 5. PeerJS Связь
 function initPeer(videoId, remoteId = null) {
     if (typeof Peer === 'undefined') {
-        alert("Ошибка: Сеть еще загружается. Нажмите еще раз через 2 секунды.");
+        alert("Сеть еще загружается. Попробуйте через пару секунд.");
         return;
     }
 
@@ -76,7 +76,7 @@ function initPeer(videoId, remoteId = null) {
         activeConn = conn;
         setupCommunication();
         
-        // Синхронизация нового участника
+        // Синхронизация при подключении гостя
         const syncCheck = setInterval(() => {
             if (player && player.getCurrentTime) {
                 sendData({
@@ -180,7 +180,7 @@ function sendMsg() {
     input.value = '';
 }
 
-// Поддержка Enter
+// Поддержка Enter в чате
 document.getElementById('msg-input')?.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') sendMsg();
 });
@@ -194,15 +194,15 @@ function appendMessage(user, text, style) {
     container.scrollTop = container.scrollHeight;
 }
 
-// Ссылка изменена на твою!
+// Интеграция твоей ссылки GitHub Pages
 function inviteFriend() {
     const baseUrl = "https://kronos2008.github.io/Test1/"; 
     const inviteLink = `${baseUrl}?startapp=room_${peer.id}`;
     
     if (navigator.clipboard) {
         navigator.clipboard.writeText(inviteLink).then(() => {
-            if (tg) tg.showAlert("Ссылка скопирована!");
-            else alert("Скопировано!");
+            if (tg) tg.showAlert("Ссылка скопирована! Отправь другу.");
+            else alert("Ссылка скопирована!");
         });
     } else {
         alert("Твоя ссылка: " + inviteLink);
