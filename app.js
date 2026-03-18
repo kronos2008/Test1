@@ -1,11 +1,9 @@
 /* ================================================================
-   CineWave — app.js ПРОСТОЕ РАБОЧЕЕ РЕШЕНИЕ
+   CineWave — app.js С РАБОЧИМ ПЛЕЕРОМ
 
-   КАК РАБОТАЕТ:
-   1. Вставляешь ссылку на фильм
-   2. Создаётся комната
-   3. При нажатии "Смотреть" открывается фильм в отдельном окне
-   4. Друг делает то же самое
+   ТЕПЕРЬ:
+   1. Фильм открывается ВНУТРИ приложения через embed
+   2. Работает для RuTube, VK, YouTube
    ================================================================ */
 'use strict';
 
@@ -24,10 +22,14 @@ var S = {
   roomId: null, isHost: false, video: null, inviteLink: '',
   viewers: {}, chatMsgs: [],
   presTimer: null,
-  gunRoom: null, gunChat: null
+  gunRoom: null, gunChat: null,
+  gun: null,
+  playerMode: false
 };
 
-var gun = Gun(GUN_PEERS);
+// Инициализируем GUN
+var gun = Gun({ peers: GUN_PEERS, localStorage: false });
+S.gun = gun;
 
 /* ── DOM ── */
 function el(id)  { return document.getElementById(id); }
@@ -87,46 +89,45 @@ function getParam(k) {
   try { return new URLSearchParams(window.location.search).get(k); } catch(e) { return null; }
 }
 
-/* ── ОТКРЫТЬ ССЫЛКУ ── */
-function openExternal(url) {
-  if (!url) {
-    toast('Ссылка на фильм не найдена');
-    return;
+/* ── КОНВЕРТАЦИЯ ССЫЛОК В EMBED ── */
+function convertToEmbedUrl(url) {
+  console.log('Converting URL:', url);
+  
+  // RuTube
+  var rtMatch = url.match(/rutube\.ru\/video\/([a-zA-Z0-9]+)/);
+  if (rtMatch) {
+    return 'https://rutube.ru/play/embed/' + rtMatch[1];
   }
   
-  console.log('Opening URL:', url);
-  
-  // Пробуем открыть через Telegram
-  if (S.tg && S.tg.openLink) {
-    try { 
-      S.tg.openLink(url); 
-      return; 
-    } catch(e) {
-      console.log('Telegram openLink error:', e);
-    }
+  // VK видео (формат video-123456_789012)
+  var vkMatch = url.match(/vk\.com\/video(-?\d+)_(\d+)/);
+  if (vkMatch) {
+    return 'https://vk.com/video_ext.php?oid=' + vkMatch[1] + '&id=' + vkMatch[2] + '&hd=1&autoplay=1';
   }
   
-  // Пробуем открыть через window.open
-  try {
-    var win = window.open(url, '_blank');
-    if (!win) {
-      // Если заблокировано, пробуем прямой переход
-      window.location.href = url;
-    }
-  } catch(e) {
-    console.log('Window open error:', e);
-    toast('Не удалось открыть ссылку');
+  // VK клип
+  var clipMatch = url.match(/vk\.com\/clip(-?\d+)_(\d+)/);
+  if (clipMatch) {
+    return 'https://vk.com/video_ext.php?oid=' + clipMatch[1] + '&id=' + clipMatch[2] + '&hd=1&autoplay=1';
   }
+  
+  // YouTube
+  var ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+  if (ytMatch) {
+    return 'https://www.youtube.com/embed/' + ytMatch[1] + '?autoplay=1&rel=0';
+  }
+  
+  return url;
 }
 
-/* ── ПОЛУЧИТЬ НАЗВАНИЕ ИСТОЧНИКА ── */
-function getSourceLabel(video) {
-  if (!video) return '';
-  
-  if (video.source === 'rutube') return 'RuTube';
-  if (video.source === 'vk') return 'VK Видео';
-  if (video.source === 'youtube') return 'YouTube';
-  return 'Видео';
+/* ── ПОЛУЧИТЬ ID ДЛЯ ПРЕВЬЮ ── */
+function getThumbnail(url) {
+  // YouTube
+  var ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  if (ytMatch) {
+    return 'https://img.youtube.com/vi/' + ytMatch[1] + '/mqdefault.jpg';
+  }
+  return '';
 }
 
 /* ═══ TELEGRAM INIT ═══ */
@@ -148,12 +149,18 @@ function initTG() {
       last:  u.last_name    || '',
       photo: u.photo_url    || '',
     };
+    
+    renderBadge();
+    
+    setTimeout(function() {
+      checkStart();
+    }, 100);
+    
   } else {
     S.user = { id: 'dev_' + uid(), name: 'Тест', last: '', photo: '' };
+    renderBadge();
+    checkStart();
   }
-  
-  renderBadge();
-  checkStart();
 }
 
 function renderBadge() {
@@ -175,9 +182,13 @@ function checkStart() {
   
   if (!p) p = getParam('room');
   if (!p) p = getParam('startapp');
-
-  if (p && p.indexOf('room_') === 0) {
-    joinRoom(p.replace('room_', ''));
+  
+  if (p) {
+    if (p.indexOf('room_') === 0) {
+      joinRoom(p.replace('room_', ''));
+    } else {
+      joinRoom(p);
+    }
   } else {
     showScreen('home');
   }
@@ -190,25 +201,27 @@ function createRoom(video) {
   var rid = uid();
   S.roomId = rid;
   S.isHost = true;
-  S.video  = video;
+  S.video = video;
 
-  console.log('Creating room:', rid, video);
+  console.log('Creating room with video:', video);
 
   var g = gun.get('cw4').get(rid);
+  
   g.get('host').put(String(S.user.id));
-  g.get('title').put(video.title || 'Видео');
+  g.get('title').put(video.title || 'Фильм');
   g.get('thumb').put(video.thumb || '');
   g.get('source').put(video.source || '');
   g.get('url').put(video.originalUrl || '');
-  g.get('created').put(Date.now());
+  g.get('embedUrl').put(video.embedUrl || '');
   
-  g.get('viewers').get(S.user.id).put({
+  var viewerData = {
     id: S.user.id,
     name: S.user.name,
     photo: S.user.photo || '',
     ts: Date.now()
-  });
+  };
   
+  g.get('viewers').get(S.user.id).put(viewerData);
   S.gunRoom = g;
 
   beginRoom(rid, video);
@@ -251,25 +264,29 @@ function joinRoom(rid) {
       
       done = true;
       
-      console.log('Joined room:', rid, data);
+      console.log('Joined room data:', data);
       
       S.roomId = rid;
       S.isHost = (data.host === S.user.id);
+      
       S.video = {
         source:      data.source || '',
-        title:       data.title || 'Видео',
+        title:       data.title || 'Фильм',
         thumb:       data.thumb || '',
         originalUrl: data.url || '',
+        embedUrl:    data.embedUrl || convertToEmbedUrl(data.url || ''),
       };
       
       S.gunRoom = g;
       
-      g.get('viewers').get(S.user.id).put({
+      var viewerData = {
         id: S.user.id,
         name: S.user.name,
         photo: S.user.photo || '',
         ts: Date.now()
-      });
+      };
+      
+      g.get('viewers').get(S.user.id).put(viewerData);
       
       beginRoom(rid, S.video);
     });
@@ -285,7 +302,14 @@ function beginRoom(rid, video) {
   toastClear();
   showScreen('room');
   S.chatMsgs = [];
-  el('cmsgs').innerHTML = '<div class="sys-msg">Комната создана. Нажми "Смотреть" чтобы начать просмотр!</div>';
+  
+  // Скрываем плеер при входе в комнату
+  hidePlayer();
+  
+  var cmsgs = el('cmsgs');
+  if (cmsgs) {
+    cmsgs.innerHTML = '<div class="sys-msg">Комната создана. Нажми "Смотреть" чтобы начать просмотр!</div>';
+  }
 
   buildLink(rid);
   renderMovieBlock(video);
@@ -295,13 +319,76 @@ function beginRoom(rid, video) {
   updateMyRoomCard(rid, video);
 }
 
+/* ═══════════════════════════════════════
+   ПОКАЗАТЬ/СКРЫТЬ ПЛЕЕР
+   ═══════════════════════════════════════ */
+function showPlayer() {
+  S.playerMode = true;
+  
+  var movieBlock = el('movie-block');
+  var statusBar = qs('.status-bar');
+  var rpanel = qs('.rpanel');
+  var roomWrap = qs('.room-wrap');
+  
+  if (movieBlock) movieBlock.style.display = 'none';
+  if (statusBar) statusBar.style.display = 'none';
+  if (rpanel) rpanel.style.display = 'none';
+  
+  // Создаем или показываем плеер
+  var playerContainer = el('player-container');
+  if (!playerContainer) {
+    playerContainer = document.createElement('div');
+    playerContainer.id = 'player-container';
+    playerContainer.className = 'player-container';
+    
+    if (roomWrap) {
+      roomWrap.insertBefore(playerContainer, roomWrap.firstChild);
+    }
+  }
+  
+  playerContainer.style.display = 'flex';
+  playerContainer.innerHTML = '<div class="player-header">' +
+    '<button class="back-from-player" id="back-from-player">' +
+    '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="white" stroke-width="2" stroke-linecap="round"/></svg>' +
+    '</button>' +
+    '<span class="player-title">' + esc(S.video.title) + '</span>' +
+    '</div>' +
+    '<div class="player-wrapper">' +
+    '<iframe src="' + esc(S.video.embedUrl || S.video.originalUrl) + '" ' +
+    'frameborder="0" allowfullscreen="1" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" ' +
+    'style="width:100%;height:100%;"></iframe>' +
+    '</div>';
+  
+  // Добавляем обработчик для кнопки назад
+  var backBtn = el('back-from-player');
+  if (backBtn) {
+    backBtn.addEventListener('click', hidePlayer);
+  }
+}
+
+function hidePlayer() {
+  S.playerMode = false;
+  
+  var movieBlock = el('movie-block');
+  var statusBar = qs('.status-bar');
+  var rpanel = qs('.rpanel');
+  var playerContainer = el('player-container');
+  
+  if (movieBlock) movieBlock.style.display = 'flex';
+  if (statusBar) statusBar.style.display = 'flex';
+  if (rpanel) rpanel.style.display = 'flex';
+  if (playerContainer) playerContainer.style.display = 'none';
+}
+
 function buildLink(rid) {
   var link = S.tg
     ? 'https://t.me/' + BOT_USERNAME + '?startapp=room_' + rid
     : APP_URL + '?room=' + rid;
   
   S.inviteLink = link;
-  el('ltxt').textContent = link;
+  
+  var ltxt = el('ltxt');
+  if (ltxt) ltxt.textContent = link;
 }
 
 /* ═══════════════════════════════════════
@@ -325,20 +412,31 @@ function renderMovieBlock(video) {
   var btn = el('watch-now-btn');
   if (btn) {
     btn.onclick = function() {
-      console.log('Watch button clicked, URL:', video.originalUrl);
+      console.log('Watch button clicked, playing:', video);
       
       if (!video.originalUrl) { 
         toast('Ссылка на фильм не найдена'); 
         return; 
       }
       
-      // Открываем фильм
-      openExternal(video.originalUrl);
-      
-      // Показываем подсказку
-      toast('Фильм открывается в новом окне', 2000);
+      // Показываем плеер внутри приложения
+      showPlayer();
     };
   }
+}
+
+/* ═══════════════════════════════════════
+   ПОЛУЧИТЬ ИСТОЧНИК
+   ═══════════════════════════════════════ */
+function getSourceLabel(video) {
+  if (!video) return '';
+  var src = video.source || '';
+  var url = video.originalUrl || '';
+
+  if (src === 'rutube' || (url && url.includes('rutube'))) return 'RuTube';
+  if (src === 'vk' || (url && url.includes('vk.com'))) return 'VK Видео';
+  if (src === 'youtube' || (url && url.includes('youtube'))) return 'YouTube';
+  return 'Видео';
 }
 
 /* ═══════════════════════════════════════
@@ -351,7 +449,6 @@ function listenViewers(rid) {
     renderViewers();
   });
   
-  // Очищаем неактивных
   setInterval(function() {
     var now = Date.now();
     var changed = false;
@@ -521,6 +618,8 @@ function leaveRoom() {
   S.viewers = {};
   S.gunRoom = null;
   S.gunChat = null;
+  S.playerMode = false;
+  hidePlayer();
   showScreen('home');
 }
 
@@ -534,46 +633,51 @@ function parseURL(url) {
   console.log('Parsing URL:', url);
 
   // RuTube
-  if (url.includes('rutube.ru') && url.includes('/video/')) {
+  var rtMatch = url.match(/rutube\.ru\/video\/([a-zA-Z0-9]+)/);
+  if (rtMatch) {
+    var videoId = rtMatch[1];
     return {
       source:      'rutube',
       title:       'RuTube видео',
       thumb:       '',
       originalUrl: url,
+      embedUrl:    'https://rutube.ru/play/embed/' + videoId,
     };
   }
 
   // VK video
-  if (url.includes('vk.com/video') || url.includes('vk.com/clip')) {
+  var vkMatch = url.match(/vk\.com\/video(-?\d+)_(\d+)/);
+  if (vkMatch) {
     return {
       source:      'vk',
       title:       'VK видео',
       thumb:       '',
       originalUrl: url,
+      embedUrl:    'https://vk.com/video_ext.php?oid=' + vkMatch[1] + '&id=' + vkMatch[2] + '&hd=1&autoplay=1',
+    };
+  }
+  
+  var clipMatch = url.match(/vk\.com\/clip(-?\d+)_(\d+)/);
+  if (clipMatch) {
+    return {
+      source:      'vk',
+      title:       'VK клип',
+      thumb:       '',
+      originalUrl: url,
+      embedUrl:    'https://vk.com/video_ext.php?oid=' + clipMatch[1] + '&id=' + clipMatch[2] + '&hd=1&autoplay=1',
     };
   }
 
   // YouTube
-  if (url.includes('youtube.com') || url.includes('youtu.be')) {
-    var ytId = null;
-    var ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-    if (ytMatch) ytId = ytMatch[1];
-    
+  var ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+  if (ytMatch) {
+    var ytId = ytMatch[1];
     return {
       source:      'youtube',
       title:       'YouTube видео',
-      thumb:       ytId ? 'https://img.youtube.com/vi/' + ytId + '/mqdefault.jpg' : '',
+      thumb:       'https://img.youtube.com/vi/' + ytId + '/mqdefault.jpg',
       originalUrl: url,
-    };
-  }
-
-  // Прямая ссылка на видео
-  if (url.match(/\.(mp4|webm|ogv|m3u8)(\?.*)?$/i)) {
-    return {
-      source:      'direct',
-      title:       'Видео',
-      thumb:       '',
-      originalUrl: url,
+      embedUrl:    'https://www.youtube.com/embed/' + ytId + '?autoplay=1&rel=0',
     };
   }
 
@@ -587,6 +691,7 @@ function openInv() {
   el('ltxt').textContent = S.inviteLink || '';
   el('inv-modal').style.display = 'flex';
 }
+
 function closeInv() {
   el('inv-modal').style.display = 'none';
 }
@@ -595,38 +700,35 @@ function closeInv() {
    СОБЫТИЯ
    ═══════════════════════════════════════ */
 function bindEvents() {
-
-  el('open-rutube').addEventListener('click', function() {
-    openExternal('https://rutube.ru');
-    toast('Найди фильм → скопируй ссылку → вернись и вставь', 4000);
+  el('open-rutube')?.addEventListener('click', function() {
+    window.open('https://rutube.ru', '_blank');
   });
 
-  el('open-vk').addEventListener('click', function() {
-    openExternal('https://vk.com/video');
-    toast('Найди фильм → скопируй ссылку из адресной строки → вернись и вставь', 4000);
+  el('open-vk')?.addEventListener('click', function() {
+    window.open('https://vk.com/video', '_blank');
   });
 
-  el('url-go').addEventListener('click', handleGo);
+  el('url-go')?.addEventListener('click', handleGo);
   
-  el('url-inp').addEventListener('keydown', function(e) {
+  el('url-inp')?.addEventListener('keydown', function(e) {
     if (e.key === 'Enter') handleGo();
   });
 
-  el('btn-back').addEventListener('click', leaveRoom);
-  el('btn-inv').addEventListener('click', openInv);
+  el('btn-back')?.addEventListener('click', leaveRoom);
+  el('btn-inv')?.addEventListener('click', openInv);
 
-  el('close-inv').addEventListener('click', closeInv);
+  el('close-inv')?.addEventListener('click', closeInv);
   
-  el('inv-modal').addEventListener('click', function(e) {
+  el('inv-modal')?.addEventListener('click', function(e) {
     if (e.target === el('inv-modal')) closeInv();
   });
   
-  el('cbtn').addEventListener('click', function() {
+  el('cbtn')?.addEventListener('click', function() {
     copyText(S.inviteLink);
     toast('Ссылка скопирована!');
   });
   
-  el('tg-share').addEventListener('click', function() {
+  el('tg-share')?.addEventListener('click', function() {
     if (S.tg && S.tg.switchInlineQuery) {
       try {
         S.tg.switchInlineQuery('room_' + S.roomId, ['users', 'groups']);
@@ -641,9 +743,9 @@ function bindEvents() {
     );
   });
 
-  el('sbtn').addEventListener('click', doSend);
+  el('sbtn')?.addEventListener('click', doSend);
   
-  el('cinp').addEventListener('keydown', function(e) {
+  el('cinp')?.addEventListener('keydown', function(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       doSend();
@@ -653,8 +755,9 @@ function bindEvents() {
 
 function handleGo() {
   var inp = el('url-inp');
-  var url = (inp.value || '').trim();
+  if (!inp) return;
   
+  var url = (inp.value || '').trim();
   if (!url) {
     toast('Вставьте ссылку на фильм');
     inp.focus();
@@ -673,7 +776,9 @@ function handleGo() {
 
 function doSend() {
   var inp = el('cinp');
-  var v   = (inp.value || '').trim();
+  if (!inp) return;
+  
+  var v = (inp.value || '').trim();
   if (!v) return;
   
   sendMsg(v);
