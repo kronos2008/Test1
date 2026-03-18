@@ -3,39 +3,475 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SoundPlay Premium</title>
-    <link rel="stylesheet" href="style.css">
+    <title>SoundPlay — реальная музыка</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        :root {
+            --bg: #0a0a0f;
+            --surface: rgba(18, 18, 25, 0.95);
+            --card: rgba(30, 30, 40, 0.7);
+            --accent: #8b5cf6;
+            --accent-glow: rgba(139, 92, 246, 0.5);
+            --text: #ffffff;
+            --text-dim: #a0a0b0;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        .bg-glow {
+            position: fixed;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at 30% 30%, rgba(139, 92, 246, 0.2) 0%, transparent 50%),
+                        radial-gradient(circle at 80% 70%, rgba(192, 132, 252, 0.15) 0%, transparent 50%);
+            animation: rotate 30s linear infinite;
+            z-index: -1;
+        }
+
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            position: relative;
+            backdrop-filter: blur(20px);
+        }
+
+        .header {
+            padding: 20px;
+            z-index: 10;
+        }
+
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 26px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #fff, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .user-badge {
+            background: var(--surface);
+            padding: 6px 14px;
+            border-radius: 30px;
+            font-size: 12px;
+            color: var(--accent);
+            border: 1px solid var(--accent);
+            box-shadow: 0 0 15px var(--accent-glow);
+        }
+
+        .content-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0 20px 180px 20px;
+            scroll-behavior: smooth;
+        }
+
+        .page {
+            display: none;
+        }
+
+        .page.active {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .welcome-block {
+            margin-bottom: 25px;
+        }
+
+        .welcome-block h2 {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+
+        .welcome-block p {
+            color: var(--text-dim);
+        }
+
+        /* Треки */
+        .track-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .track-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            background: var(--surface);
+            border-radius: 16px;
+            border: 1px solid rgba(139, 92, 246, 0.2);
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .track-item:active {
+            transform: scale(0.98);
+            background: rgba(139, 92, 246, 0.2);
+        }
+
+        .track-img {
+            width: 50px;
+            height: 50px;
+            border-radius: 10px;
+            margin-right: 15px;
+            background: var(--accent);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+
+        .track-info {
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .track-title {
+            font-size: 16px;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .track-artist {
+            font-size: 13px;
+            color: var(--text-dim);
+        }
+
+        .source-tag {
+            font-size: 10px;
+            padding: 3px 8px;
+            border-radius: 12px;
+            background: #ff0000;
+            color: white;
+            margin-left: 10px;
+        }
+
+        /* Мини-плеер */
+        .mini-player {
+            position: fixed;
+            bottom: 85px;
+            left: 15px;
+            right: 15px;
+            background: var(--surface);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            border: 1px solid var(--accent);
+            box-shadow: 0 5px 25px var(--accent-glow);
+            z-index: 50;
+            transition: transform 0.3s;
+        }
+
+        .mini-player.hidden {
+            transform: translateY(150%);
+        }
+
+        .mp-progress-container {
+            width: 100%;
+            height: 3px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 3px 3px 0 0;
+            overflow: hidden;
+        }
+
+        .mp-progress-bar {
+            height: 100%;
+            background: var(--accent);
+            width: 0%;
+            transition: width 0.1s linear;
+        }
+
+        .mp-content {
+            display: flex;
+            align-items: center;
+            padding: 12px 15px;
+        }
+
+        .mp-cover {
+            width: 44px;
+            height: 44px;
+            border-radius: 10px;
+            background: var(--accent);
+            margin-right: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .mp-info {
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .mp-title {
+            font-size: 15px;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .mp-artist {
+            font-size: 12px;
+            color: var(--text-dim);
+        }
+
+        .btn-play {
+            background: var(--accent);
+            border: none;
+            color: white;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 0 15px var(--accent-glow);
+        }
+
+        /* Нижнее меню */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            height: 80px;
+            background: var(--surface);
+            backdrop-filter: blur(20px);
+            display: flex;
+            border-top: 1px solid rgba(139, 92, 246, 0.3);
+            padding-bottom: 10px;
+            z-index: 60;
+        }
+
+        .nav-btn {
+            flex: 1;
+            background: none;
+            border: none;
+            color: var(--text-dim);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            font-size: 11px;
+            transition: 0.2s;
+        }
+
+        .nav-btn.active {
+            color: var(--accent);
+        }
+
+        .nav-icon {
+            font-size: 22px;
+        }
+
+        /* Полноэкранный плеер */
+        .full-player {
+            position: fixed;
+            inset: 0;
+            background: var(--bg);
+            z-index: 200;
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.3s;
+        }
+
+        .full-player.hidden {
+            transform: translateY(100%);
+        }
+
+        .close-btn {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: var(--surface);
+            border: 1px solid var(--accent);
+            color: white;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            font-size: 20px;
+            cursor: pointer;
+            z-index: 10;
+        }
+
+        .fp-cover {
+            width: 100%;
+            aspect-ratio: 1/1;
+            border-radius: 30px;
+            background: var(--accent);
+            margin: 30px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 80px;
+            box-shadow: 0 20px 40px var(--accent-glow);
+        }
+
+        .fp-info {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .fp-info h2 {
+            font-size: 28px;
+            margin-bottom: 5px;
+        }
+
+        .fp-info p {
+            color: var(--accent);
+            font-size: 18px;
+        }
+
+        .fp-controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .fp-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 30px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .fp-btn:hover {
+            background: rgba(139, 92, 246, 0.2);
+        }
+
+        .fp-btn.main {
+            width: 80px;
+            height: 80px;
+            background: var(--accent);
+            font-size: 35px;
+            box-shadow: 0 10px 25px var(--accent-glow);
+        }
+
+        .btn-like {
+            background: var(--surface);
+            border: 1px solid var(--accent);
+            color: white;
+            padding: 18px;
+            border-radius: 20px;
+            width: 100%;
+            font-size: 16px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .btn-like.in-library {
+            background: var(--accent);
+        }
+
+        /* Поиск */
+        .search-bar {
+            margin-bottom: 20px;
+        }
+
+        #search-input {
+            width: 100%;
+            background: var(--surface);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            padding: 16px 20px;
+            border-radius: 30px;
+            color: white;
+            font-size: 16px;
+            outline: none;
+        }
+
+        #search-input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* YouTube плеер скрытый */
+        #youtube-player {
+            position: absolute;
+            width: 0;
+            height: 0;
+            visibility: hidden;
+        }
+    </style>
 </head>
 <body>
-    <div class="app-container">
-        <div class="bg-glow"></div>
+    <div class="bg-glow"></div>
 
+    <div class="app-container">
         <header class="header">
             <div class="header-top">
                 <h1 class="logo">SoundPlay</h1>
-                <div class="user-badge" id="usersCount">Premium</div>
+                <div class="user-badge" id="usersCount">⚡ REAL</div>
             </div>
         </header>
 
         <main class="content-area">
             <section id="page-top" class="page active">
                 <div class="welcome-block">
-                    <h2>Твоя волна</h2>
-                    <p>Лучшее из VK и Яндекс Музыки</p>
+                    <h2>Сейчас в тренде</h2>
+                    <p>Реальное воспроизведение через YouTube</p>
                 </div>
                 <div id="top-tracks" class="track-list"></div>
             </section>
 
             <section id="page-search" class="page">
                 <div class="search-bar">
-                    <input type="text" id="search-input" placeholder="Треки, артисты, альбомы..." autocomplete="off">
+                    <input type="text" id="search-input" placeholder="🔍 Поиск треков..." autocomplete="off">
                 </div>
                 <div id="search-results" class="track-list"></div>
             </section>
 
             <section id="page-library" class="page">
-                <h2 class="section-title">Любимое</h2>
+                <h2 style="margin-bottom: 20px;">❤️ Любимое</h2>
                 <div id="library-tracks" class="track-list"></div>
             </section>
         </main>
@@ -45,10 +481,10 @@
                 <div id="mp-progress" class="mp-progress-bar"></div>
             </div>
             <div class="mp-content" id="open-full-player">
-                <div class="mp-cover" id="mp-cover-img"></div>
+                <div class="mp-cover" id="mp-cover-img">🎵</div>
                 <div class="mp-info">
-                    <div id="mp-title" class="mp-title">Название</div>
-                    <div id="mp-artist" class="mp-artist">Исполнитель</div>
+                    <div id="mp-title" class="mp-title">Нет трека</div>
+                    <div id="mp-artist" class="mp-artist">Выберите трек</div>
                 </div>
                 <div class="mp-actions">
                     <button id="btn-play-pause" class="btn-play">▶</button>
@@ -58,7 +494,7 @@
 
         <nav class="bottom-nav">
             <button class="nav-btn active" data-target="page-top">
-                <span class="nav-icon">🏠</span>
+                <span class="nav-icon">🔥</span>
                 <span>Главная</span>
             </button>
             <button class="nav-btn" data-target="page-search">
@@ -75,20 +511,366 @@
     <div id="full-player" class="full-player hidden">
         <button id="close-full-player" class="close-btn">✕</button>
         <div class="fp-body">
-            <div id="fp-cover" class="fp-cover"></div>
+            <div id="fp-cover" class="fp-cover">🎵</div>
             <div class="fp-info">
-                <h2 id="fp-title">Название трека</h2>
-                <p id="fp-artist">Артист</p>
+                <h2 id="fp-title">Название</h2>
+                <p id="fp-artist">Исполнитель</p>
             </div>
             <div class="fp-controls">
-                <button class="fp-btn secondary">⏮</button>
+                <button class="fp-btn" id="fp-prev">⏮</button>
                 <button id="fp-play-pause" class="fp-btn main">▶</button>
-                <button class="fp-btn secondary">⏭</button>
+                <button class="fp-btn" id="fp-next">⏭</button>
             </div>
             <button id="btn-add-lib" class="btn-like">Добавить в медиатеку</button>
         </div>
     </div>
 
-    <script src="app.js"></script>
+    <!-- YouTube API -->
+    <div id="youtube-player"></div>
+    <script src="https://www.youtube.com/iframe_api"></script>
+
+    <script>
+        // Telegram
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+
+        // YouTube плеер
+        let ytPlayer;
+        let currentTrack = null;
+        let isPlaying = false;
+        let library = JSON.parse(localStorage.getItem('library')) || [];
+        let playlist = [];
+        let currentIndex = 0;
+        let progressInterval;
+
+        // Реальные треки с YouTube ID
+        const tracks = [
+            { 
+                id: 1, 
+                title: 'Blinding Lights', 
+                artist: 'The Weeknd', 
+                youtubeId: 'fHI8X4OXluQ',
+                cover: '🌃',
+                duration: 200
+            },
+            { 
+                id: 2, 
+                title: 'Flowers', 
+                artist: 'Miley Cyrus', 
+                youtubeId: 'G7KNmW9a75Y',
+                cover: '🌸',
+                duration: 187
+            },
+            { 
+                id: 3, 
+                title: 'Unholy', 
+                artist: 'Sam Smith', 
+                youtubeId: 'Uq9gPaXrTdA',
+                cover: '😈',
+                duration: 156
+            },
+            { 
+                id: 4, 
+                title: 'I Wanna Be Yours', 
+                artist: 'Arctic Monkeys', 
+                youtubeId: 'nyuo9-OjNNg',
+                cover: '🌙',
+                duration: 210
+            },
+            { 
+                id: 5, 
+                title: 'Sweater Weather', 
+                artist: 'The Neighbourhood', 
+                youtubeId: 'GCdwKhTtNNw',
+                cover: '🧥',
+                duration: 240
+            },
+            { 
+                id: 6, 
+                title: 'Cradles', 
+                artist: 'Sub Urban', 
+                youtubeId: 'Hn4j7sjl8zQ',
+                cover: '👶',
+                duration: 190
+            },
+            { 
+                id: 7, 
+                title: '505', 
+                artist: 'Arctic Monkeys', 
+                youtubeId: 'qU9mHegkTc4',
+                cover: '5️⃣',
+                duration: 260
+            },
+            { 
+                id: 8, 
+                title: 'Do I Wanna Know?', 
+                artist: 'Arctic Monkeys', 
+                youtubeId: 'bpOSxM0rNPM',
+                cover: '❓',
+                duration: 272
+            }
+        ];
+
+        // Инициализация YouTube API
+        function onYouTubeIframeAPIReady() {
+            ytPlayer = new YT.Player('youtube-player', {
+                height: '0',
+                width: '0',
+                playerVars: {
+                    'playsinline': 1,
+                    'controls': 0,
+                    'disablekb': 1,
+                    'fs': 0,
+                    'modestbranding': 1,
+                    'rel': 0
+                },
+                events: {
+                    'onStateChange': onPlayerStateChange,
+                    'onReady': onPlayerReady
+                }
+            });
+        }
+
+        function onPlayerReady() {
+            console.log('YouTube плеер готов');
+            renderTopTracks();
+        }
+
+        function onPlayerStateChange(event) {
+            // Воспроизведение закончилось
+            if (event.data === YT.PlayerState.ENDED) {
+                nextTrack();
+            }
+            
+            // Обновляем состояние
+            isPlaying = event.data === YT.PlayerState.PLAYING;
+            updatePlayButtons();
+            
+            // Обновляем прогресс
+            if (isPlaying) {
+                startProgressTracking();
+            } else {
+                stopProgressTracking();
+            }
+        }
+
+        function startProgressTracking() {
+            stopProgressTracking();
+            progressInterval = setInterval(() => {
+                if (ytPlayer && ytPlayer.getCurrentTime) {
+                    const current = ytPlayer.getCurrentTime();
+                    const duration = ytPlayer.getDuration();
+                    const percent = (current / duration) * 100;
+                    document.getElementById('mp-progress').style.width = `${percent}%`;
+                }
+            }, 100);
+        }
+
+        function stopProgressTracking() {
+            if (progressInterval) {
+                clearInterval(progressInterval);
+            }
+        }
+
+        // Воспроизведение трека
+        function playTrack(track) {
+            if (!track) return;
+            
+            currentTrack = track;
+            
+            // Обновляем индекс в плейлисте
+            currentIndex = playlist.findIndex(t => t.id === track.id);
+            if (currentIndex === -1) {
+                playlist = [track, ...playlist.filter(t => t.id !== track.id)];
+                currentIndex = 0;
+            }
+            
+            // Загружаем в YouTube плеер
+            if (ytPlayer && ytPlayer.loadVideoById) {
+                ytPlayer.loadVideoById(track.youtubeId);
+                ytPlayer.playVideo();
+            }
+            
+            // Обновляем UI
+            document.getElementById('mini-player').classList.remove('hidden');
+            updatePlayerUI(track);
+        }
+
+        function updatePlayerUI(track) {
+            document.getElementById('mp-title').textContent = track.title;
+            document.getElementById('mp-artist').textContent = track.artist;
+            document.getElementById('mp-cover-img').textContent = track.cover;
+            
+            document.getElementById('fp-title').textContent = track.title;
+            document.getElementById('fp-artist').textContent = track.artist;
+            document.getElementById('fp-cover').textContent = track.cover;
+            
+            const btnAddLib = document.getElementById('btn-add-lib');
+            const inLib = library.some(t => t.id === track.id);
+            btnAddLib.textContent = inLib ? '✓ В медиатеке' : 'Добавить в медиатеку';
+            btnAddLib.classList.toggle('in-library', inLib);
+        }
+
+        function updatePlayButtons() {
+            const icon = isPlaying ? '⏸' : '▶';
+            document.getElementById('btn-play-pause').textContent = icon;
+            document.getElementById('fp-play-pause').textContent = icon;
+        }
+
+        function togglePlay() {
+            if (!currentTrack) return;
+            
+            if (isPlaying) {
+                ytPlayer.pauseVideo();
+            } else {
+                ytPlayer.playVideo();
+            }
+        }
+
+        function nextTrack() {
+            if (playlist.length === 0) return;
+            currentIndex = (currentIndex + 1) % playlist.length;
+            playTrack(playlist[currentIndex]);
+        }
+
+        function prevTrack() {
+            if (playlist.length === 0) return;
+            currentIndex = (currentIndex - 1 + playlist.length) % playlist.length;
+            playTrack(playlist[currentIndex]);
+        }
+
+        // Создание элемента трека
+        function createTrackElement(track) {
+            const div = document.createElement('div');
+            div.className = 'track-item';
+            div.innerHTML = `
+                <div class="track-img">${track.cover}</div>
+                <div class="track-info">
+                    <div class="track-title">${track.title}</div>
+                    <div class="track-artist">${track.artist}</div>
+                </div>
+                <span class="source-tag">YT</span>
+            `;
+            div.addEventListener('click', () => playTrack(track));
+            return div;
+        }
+
+        // Отрисовка главной страницы
+        function renderTopTracks() {
+            const container = document.getElementById('top-tracks');
+            container.innerHTML = '';
+            playlist = tracks.slice(0, 5);
+            playlist.forEach(track => {
+                container.appendChild(createTrackElement(track));
+            });
+        }
+
+        // Поиск
+        function searchTracks(query) {
+            if (!query) return tracks;
+            return tracks.filter(t => 
+                t.title.toLowerCase().includes(query.toLowerCase()) ||
+                t.artist.toLowerCase().includes(query.toLowerCase())
+            );
+        }
+
+        // Отрисовка библиотеки
+        function renderLibrary() {
+            const container = document.getElementById('library-tracks');
+            container.innerHTML = '';
+            
+            if (library.length === 0) {
+                container.innerHTML = '<div style="color: var(--text-dim); text-align: center; padding: 40px;">❤️ Добавьте треки в любимое</div>';
+                return;
+            }
+            
+            library.forEach(track => {
+                container.appendChild(createTrackElement(track));
+            });
+        }
+
+        // Инициализация
+        document.addEventListener('DOMContentLoaded', () => {
+            setupEventListeners();
+            renderTopTracks();
+            renderLibrary();
+        });
+
+        function setupEventListeners() {
+            // Навигация
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const targetId = btn.dataset.target;
+                    
+                    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    
+                    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+                    document.getElementById(targetId).classList.add('active');
+                });
+            });
+            
+            // Поиск
+            let timeout;
+            document.getElementById('search-input').addEventListener('input', (e) => {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => {
+                    const query = e.target.value;
+                    const results = searchTracks(query);
+                    
+                    const container = document.getElementById('search-results');
+                    container.innerHTML = '';
+                    
+                    playlist = results;
+                    results.forEach(track => {
+                        container.appendChild(createTrackElement(track));
+                    });
+                }, 300);
+            });
+            
+            // Открыть полноэкранный плеер
+            document.getElementById('open-full-player').addEventListener('click', () => {
+                if (currentTrack) {
+                    document.getElementById('full-player').classList.remove('hidden');
+                }
+            });
+            
+            // Закрыть
+            document.getElementById('close-full-player').addEventListener('click', () => {
+                document.getElementById('full-player').classList.add('hidden');
+            });
+            
+            // Play/Pause
+            document.getElementById('btn-play-pause').addEventListener('click', (e) => {
+                e.stopPropagation();
+                togglePlay();
+            });
+            
+            document.getElementById('fp-play-pause').addEventListener('click', togglePlay);
+            
+            // Next/Prev
+            document.getElementById('fp-next').addEventListener('click', nextTrack);
+            document.getElementById('fp-prev').addEventListener('click', prevTrack);
+            
+            // Добавить в библиотеку
+            document.getElementById('btn-add-lib').addEventListener('click', function() {
+                if (!currentTrack) return;
+                
+                const index = library.findIndex(t => t.id === currentTrack.id);
+                if (index === -1) {
+                    library.push(currentTrack);
+                    this.textContent = '✓ В медиатеке';
+                    this.classList.add('in-library');
+                } else {
+                    library.splice(index, 1);
+                    this.textContent = 'Добавить в медиатеку';
+                    this.classList.remove('in-library');
+                }
+                
+                localStorage.setItem('library', JSON.stringify(library));
+                renderLibrary();
+            });
+        }
+    </script>
 </body>
-</html>
+    </html>
