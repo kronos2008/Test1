@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+  <title>CineWave</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;700;800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+
+<!-- ══════════════ ЭКРАН: ГЛАВНЫЙ ══════════════ -->
+<div id="screen-home" class="screen active">
+  <div class="bg-glow">
+    <div class="orb o1"></div>
+    <div class="orb o2"></div>
+    <div class="orb o3"></div>
+  </div>
+
+  <header class="hdr">
+    <div class="logo">
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+        <circle cx="14" cy="14" r="14" fill="url(#lg)"/>
+        <path d="M11 10l8 4-8 4V10z" fill="white"/>
+        <defs>
+          <linearGradient id="lg" x1="0" y1="0" x2="28" y2="28" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#C084FC"/><stop offset="1" stop-color="#818CF8"/>
+          </linearGradient>
+        </defs>
+      </svg>
+      CineWave
+    </div>
+    <div class="upill">
+      <div class="uava" id="uava"></div>
+      <span id="uname">Гость</span>
+    </div>
+  </header>
+
+  <div class="home-body">
+    <div class="hero">
+      <div class="etag">СМОТРИ ВМЕСТЕ</div>
+      <h1>Кино<br/><em>с друзьями</em></h1>
+      <p>Выбери фильм — пригласи друга — смотрите вместе</p>
+    </div>
+
+    <!-- КАК ЭТО РАБОТАЕТ -->
+    <div class="how-block">
+      <div class="how-step">
+        <div class="how-n">1</div>
+        <div class="how-t">Открой RuTube или VK, найди фильм и нажми на него</div>
+      </div>
+      <div class="how-arrow">↓</div>
+      <div class="how-step">
+        <div class="how-n">2</div>
+        <div class="how-t">Скопируй ссылку из браузера</div>
+      </div>
+      <div class="how-arrow">↓</div>
+      <div class="how-step">
+        <div class="how-n">3</div>
+        <div class="how-t">Вернись сюда, вставь ссылку и создай комнату</div>
+      </div>
+      <div class="how-arrow">↓</div>
+      <div class="how-step">
+        <div class="how-n">4</div>
+        <div class="how-t">Пригласи друга — он откроет тот же фильм и синхронизируется</div>
+      </div>
+    </div>
+
+    <!-- КНОПКИ ОТКРЫТЬ САЙТ -->
+    <div class="open-sites">
+      <button class="site-btn" id="open-rutube">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <rect x="2" y="2" width="20" height="20" rx="5" fill="#F50"/>
+          <path d="M8.5 8h4a2.5 2.5 0 010 5h-4V8zm0 5h2l3 3h-2.5l-2.5-2.5V13z" fill="white"/>
+        </svg>
+        Открыть RuTube
+      </button>
+      <button class="site-btn" id="open-vk">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <rect x="2" y="2" width="20" height="20" rx="5" fill="#4C75A3"/>
+          <path d="M13.6 16.1c-3.8 0-5.9-2.6-6-6.9h1.9c.1 3.1 1.4 4.4 2.5 4.7V9.2h1.8v2.7c1.1-.1 2.2-1.4 2.6-2.7h1.8c-.3 1.6-1.6 2.9-2.5 3.4 1 .4 2.4 1.5 3 3.5H16.9c-.5-1.5-1.6-2.6-3.3-2.8v2.8H13.6z" fill="white"/>
+        </svg>
+        Открыть VK Видео
+      </button>
+    </div>
+
+    <!-- ПОЛЕ ДЛЯ ВСТАВКИ ССЫЛКИ -->
+    <div class="paste-block">
+      <label class="paste-lbl">Вставь ссылку на фильм:</label>
+      <div class="paste-row">
+        <input id="url-inp"
+          type="url"
+          placeholder="https://rutube.ru/video/... или vk.com/video..."
+          autocomplete="off"
+          autocorrect="off"
+          spellcheck="false"/>
+        <button id="url-go" class="go-btn">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+            <path d="M5 11h12M12 5l6 6-6 6" stroke="white" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- АКТИВНАЯ КОМНАТА -->
+    <div id="my-room-section" style="display:none">
+      <div class="divider"></div>
+      <p class="section-lbl">АКТИВНАЯ КОМНАТА</p>
+      <div id="my-room-card"></div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════ ЭКРАН: КОМНАТА ══════════════ -->
+<div id="screen-room" class="screen">
+  <div class="room-wrap">
+
+    <!-- Блок с информацией о фильме -->
+    <div class="movie-block" id="movie-block">
+      <div class="movie-thumb" id="movie-thumb">
+        <div class="movie-thumb-placeholder">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none" opacity=".3">
+            <circle cx="16" cy="16" r="15" stroke="white" stroke-width="1.5"/>
+            <path d="M12 10l12 6-12 6V10z" fill="white"/>
+          </svg>
+        </div>
+      </div>
+      <div class="movie-info">
+        <p class="movie-source" id="movie-source-label">RuTube</p>
+        <p class="movie-title" id="movie-title">Загрузка...</p>
+        <button class="watch-now-btn" id="watch-now-btn">
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+            <circle cx="7.5" cy="7.5" r="7" stroke="white" stroke-width="1.2"/>
+            <path d="M6 5l5 2.5L6 10V5z" fill="white"/>
+          </svg>
+          Смотреть фильм
+        </button>
+      </div>
+    </div>
+
+    <!-- Оверлей статуса -->
+    <div class="status-bar">
+      <div class="wpill">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+          <circle cx="6.5" cy="4.5" r="2.2" stroke="white" stroke-width="1.2"/>
+          <path d="M1.5 11c0-2.2 2.2-4 5-4s5 1.8 5 4" stroke="white" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+        <span id="watch-n">1</span> смотрят
+      </div>
+      <div class="spill" id="spill">
+        <div class="sdot"></div>
+        <span id="slbl">Синхронизировано</span>
+      </div>
+      <button class="back-btn-room" id="btn-back">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <path d="M11 4l-7 5 7 5" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Панель под фильмом -->
+    <div class="rpanel">
+
+      <!-- Приглашение -->
+      <div class="ibar">
+        <div>
+          <p class="it">Пригласи друга</p>
+          <p class="is">Он откроет тот же фильм и вы будете в синхроне</p>
+        </div>
+        <button class="ibtn" id="btn-inv">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M7 1v8M3.5 4.5L7 1l3.5 3.5" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M1 10.5h12" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          Пригласить
+        </button>
+      </div>
+
+      <!-- Зрители -->
+      <div class="vbar" id="vbar"></div>
+
+      <!-- Чат -->
+      <div class="chat">
+        <div class="cmsgs" id="cmsgs">
+          <div class="sys-msg">Комната создана. Пригласи друга!</div>
+        </div>
+        <div class="cfoot">
+          <div class="cinpw">
+            <input id="cinp" type="text" placeholder="Написать сообщение..." maxlength="200" autocomplete="off"/>
+          </div>
+          <button class="sbtn" id="sbtn">
+            <svg width="17" height="17" viewBox="0 0 17 17" fill="none">
+              <path d="M1.5 8.5l13-6.5-6.5 13V8.5H1.5z" fill="white"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════ TOAST ══════════════ -->
+<div id="toast" class="toast"></div>
+
+
+<!-- ══════════════ INVITE MODAL ══════════════ -->
+<div id="inv-modal" class="moverlay" style="display:none">
+  <div class="mcard">
+    <div class="mhd">
+      <span>Пригласить в комнату</span>
+      <button class="xbtn" id="close-inv">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <path d="M14 4L4 14M4 4l10 10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+    <!-- Как это работает для друга -->
+    <div class="inv-how">
+      <p class="inv-how-title">Как это работает для друга:</p>
+      <p class="inv-how-text">1. Друг переходит по ссылке<br/>2. Открывает тот же фильм на RuTube/VK<br/>3. Чат и синхронизация работают автоматически</p>
+    </div>
+    <div class="lrow">
+      <span id="ltxt" class="lval"></span>
+      <button id="cbtn" class="cbtn">
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+          <rect x="4.5" y="4.5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.3"/>
+          <path d="M2.5 10.5V2.5h8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+    <button id="tg-share" class="tgbtn">
+      <svg width="17" height="17" viewBox="0 0 17 17" fill="none">
+        <path d="M1.5 8l12.5-5.5-3.5 11.5L7 9.5 14 4" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Поделиться в Telegram
+    </button>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
