@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+  <title>CineWave</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;700;800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+
+<!-- ══════════ SCREEN: HOME ══════════ -->
+<div id="screen-home" class="screen active">
+  <div class="bg-glow">
+    <div class="orb orb1"></div>
+    <div class="orb orb2"></div>
+    <div class="orb orb3"></div>
+  </div>
+
+  <header class="hdr">
+    <div class="logo">
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+        <circle cx="14" cy="14" r="14" fill="url(#lg)"/>
+        <path d="M11 10l8 4-8 4V10z" fill="white"/>
+        <defs>
+          <linearGradient id="lg" x1="0" y1="0" x2="28" y2="28" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#C084FC"/><stop offset="1" stop-color="#818CF8"/>
+          </linearGradient>
+        </defs>
+      </svg>
+      CineWave
+    </div>
+    <div class="user-chip">
+      <div class="uava" id="uava"></div>
+      <span id="uname">Гость</span>
+    </div>
+  </header>
+
+  <div class="home-body">
+    <div class="hero">
+      <div class="hero-tag">СМОТРИ ВМЕСТЕ</div>
+      <h1>Кино без<br/><em>расстояний</em></h1>
+      <p>Синхронный просмотр — пригласи друга и смотрите вместе</p>
+    </div>
+
+    <!-- 3 источника -->
+    <div class="sources">
+
+      <!-- 1. Web -->
+      <div class="src-card" id="src-web">
+        <div class="src-ico web-ico">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="9" stroke="url(#wg)" stroke-width="2"/>
+            <path d="M3 12h18M12 3c-2.5 3-4 5.5-4 9s1.5 6 4 9M12 3c2.5 3 4 5.5 4 9s-1.5 6-4 9" stroke="url(#wg)" stroke-width="1.6" stroke-linecap="round"/>
+            <defs>
+              <linearGradient id="wg" x1="3" y1="3" x2="21" y2="21" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#A78BFA"/><stop offset="1" stop-color="#60A5FA"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <div class="src-info">
+          <span class="src-name">Web — Онлайн кино</span>
+          <span class="src-hint">Открыть каталог фильмов</span>
+        </div>
+        <div class="src-arr">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+
+      <!-- 2. RuTube -->
+      <div class="src-card" id="src-rutube">
+        <div class="src-ico rt-ico">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <rect x="2" y="2" width="20" height="20" rx="5" fill="#F50"/>
+            <path d="M9 8h4.5a2.5 2.5 0 010 5H9V8zm0 5h2l3 3h-2.5L9 14v-1z" fill="white"/>
+          </svg>
+        </div>
+        <div class="src-info">
+          <span class="src-name">RuTube</span>
+          <span class="src-hint">Поиск и просмотр видео</span>
+        </div>
+        <div class="src-arr">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+
+      <!-- 3. VK -->
+      <div class="src-card" id="src-vk">
+        <div class="src-ico vk-ico">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <rect x="2" y="2" width="20" height="20" rx="5" fill="#4C75A3"/>
+            <path d="M13.6 16.1c-3.8 0-5.9-2.6-6-6.9h1.9c.1 3.1 1.4 4.4 2.5 4.7V9.2h1.8v2.7c1.1-.1 2.2-1.4 2.6-2.7h1.8c-.3 1.6-1.6 2.9-2.5 3.4 1 .4 2.4 1.5 3 3.5H16.9c-.5-1.5-1.6-2.6-3.3-2.8v2.8H13.6z" fill="white"/>
+          </svg>
+        </div>
+        <div class="src-info">
+          <span class="src-name">VK Видео</span>
+          <span class="src-hint">Открыть и выбрать фильм</span>
+        </div>
+        <div class="src-arr">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Вставить ссылку вручную -->
+    <div class="paste-block">
+      <p class="paste-label">Нашёл фильм? Вставь ссылку:</p>
+      <div class="paste-row">
+        <input id="paste-inp" type="url" placeholder="Вставить ссылку на видео..." autocomplete="off"/>
+        <button id="paste-go" class="paste-go">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M4 10h12M11 5l5 5-5 5" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Мои комнаты -->
+    <div id="my-rooms" style="display:none">
+      <p class="sec-lbl">МОИ КОМНАТЫ</p>
+      <div id="rooms-list"></div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════ SCREEN: WEB BROWSER ══════════ -->
+<div id="screen-web" class="screen">
+  <div class="browser-wrap">
+    <div class="browser-top">
+      <button class="back-btn" id="web-back">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M12 4l-8 6 8 6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="browser-url" id="browser-url-bar">cdn04.ru.a-l-p-a.com</div>
+      <button class="use-btn" id="web-use">Выбрать</button>
+    </div>
+    <iframe id="web-iframe"
+      src=""
+      frameborder="0"
+      allowfullscreen
+      allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+      class="browser-frame">
+    </iframe>
+  </div>
+</div>
+
+
+<!-- ══════════ SCREEN: RUTUBE ══════════ -->
+<div id="screen-rutube" class="screen sheet-screen">
+  <div class="sheet">
+    <div class="sbar"></div>
+    <div class="shead">
+      <span class="stitle">RuTube</span>
+      <button class="xbtn" id="close-rutube">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M14 4L4 14M4 4l10 10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="srow">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.5" stroke="#555" stroke-width="1.4"/><path d="M11 11l3 3" stroke="#555" stroke-width="1.4" stroke-linecap="round"/></svg>
+      <input id="rt-q" type="text" placeholder="Поиск фильмов на RuTube..." autocomplete="off"/>
+    </div>
+    <div class="cats" id="rt-cats">
+      <button class="cat active" data-q="фильм 2024">2024</button>
+      <button class="cat" data-q="боевик фильм">Боевики</button>
+      <button class="cat" data-q="комедия фильм">Комедии</button>
+      <button class="cat" data-q="триллер">Триллеры</button>
+      <button class="cat" data-q="мультфильм">Мульт</button>
+      <button class="cat" data-q="сериал">Сериалы</button>
+    </div>
+    <div class="vgrid" id="rt-grid">
+      <div class="grid-load"><div class="spin"></div><p>Загрузка...</p></div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════ SCREEN: VK ══════════ -->
+<div id="screen-vk" class="screen sheet-screen">
+  <div class="sheet">
+    <div class="sbar"></div>
+    <div class="shead">
+      <span class="stitle">VK Видео</span>
+      <button class="xbtn" id="close-vk">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M14 4L4 14M4 4l10 10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="srow">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.5" stroke="#555" stroke-width="1.4"/><path d="M11 11l3 3" stroke="#555" stroke-width="1.4" stroke-linecap="round"/></svg>
+      <input id="vk-q" type="text" placeholder="Поиск фильмов в VK..." autocomplete="off"/>
+    </div>
+    <div class="cats" id="vk-cats">
+      <button class="cat active" data-q="фильм 2024">2024</button>
+      <button class="cat" data-q="боевик">Боевики</button>
+      <button class="cat" data-q="комедия">Комедии</button>
+      <button class="cat" data-q="триллер">Триллеры</button>
+      <button class="cat" data-q="мультфильм">Мульт</button>
+      <button class="cat" data-q="сериал">Сериалы</button>
+    </div>
+    <div class="vgrid" id="vk-grid">
+      <div class="grid-load"><div class="spin"></div><p>Загрузка...</p></div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════ SCREEN: ROOM ══════════ -->
+<div id="screen-room" class="screen">
+  <div class="room-wrap">
+
+    <!-- Плеер -->
+    <div class="pzone">
+      <div class="pbox" id="pbox">
+        <div class="ploading" id="ploading">
+          <div class="spin"></div>
+          <span>Загрузка видео...</span>
+        </div>
+        <iframe id="iframe-pl" src="" frameborder="0" allowfullscreen
+          allow="autoplay; encrypted-media; picture-in-picture"
+          style="display:none;position:absolute;inset:0;width:100%;height:100%;border:none;"></iframe>
+        <video id="video-pl" controls playsinline
+          style="display:none;position:absolute;inset:0;width:100%;height:100%;background:#000;"></video>
+      </div>
+
+      <!-- Оверлей поверх плеера -->
+      <div class="pov">
+        <div class="pov-top">
+          <button class="pov-btn" id="room-back">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M12 4l-8 6 8 6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div class="watch-pill">
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="4.5" r="2.2" stroke="white" stroke-width="1.2"/><path d="M1.5 11c0-2.2 2.2-4 5-4s5 1.8 5 4" stroke="white" stroke-width="1.2" stroke-linecap="round"/></svg>
+            <span id="watch-n">1</span>
+          </div>
+        </div>
+        <div class="pov-bot">
+          <div class="sync-pill" id="sync-pill">
+            <div class="sdot"></div>
+            <span id="slbl">Синхронизировано</span>
+          </div>
+          <button class="pov-btn pov-inv-btn" id="pov-inv">
+            <svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M8.5 2v8M5 5.5l3.5-3.5L12 5.5" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 12h13" stroke="white" stroke-width="1.6" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Панель под плеером -->
+    <div class="rpanel">
+      <div class="inv-bar">
+        <div>
+          <p class="inv-t">Пригласи друга</p>
+          <p class="inv-s">Поделись ссылкой — он сразу попадёт сюда</p>
+        </div>
+        <button class="inv-btn" id="inv-btn">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v8M3.5 4.5L7 1l3.5 3.5" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M1 10.5h12" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg>
+          Пригласить
+        </button>
+      </div>
+
+      <div class="vbar" id="vbar"></div>
+
+      <div class="chat">
+        <div class="chat-msgs" id="chat-msgs">
+          <div class="sys-msg">Комната создана. Пригласи друга!</div>
+        </div>
+        <div class="chat-foot">
+          <div class="cinp-wrap">
+            <input id="chat-inp" type="text" placeholder="Написать сообщение..." maxlength="200" autocomplete="off"/>
+          </div>
+          <button class="sbtn" id="send-btn">
+            <svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M1.5 8.5l13-6.5-6.5 13V8.5H1.5z" fill="white"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════ TOAST ══════════ -->
+<div id="toast" class="toast"></div>
+
+
+<!-- ══════════ INVITE MODAL ══════════ -->
+<div id="inv-modal" class="moverlay" style="display:none">
+  <div class="mcard">
+    <div class="mhead">
+      <span>Пригласить в комнату</span>
+      <button class="xbtn" id="close-inv">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M14 4L4 14M4 4l10 10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="lrow">
+      <span id="link-txt" class="lval"></span>
+      <button id="copy-btn" class="cbtn">
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><rect x="4.5" y="4.5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M2.5 10.5V2.5h8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <button id="tg-share" class="tgbtn">
+      <svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M1.5 8l12.5-5.5-3.5 11.5L7 9.5 14 4" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Поделиться в Telegram
+    </button>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
