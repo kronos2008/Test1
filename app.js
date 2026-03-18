@@ -1,4 +1,7 @@
-const tg = window.Telegram.WebApp;
+/** * Cinema Party Engine v2.1 - Fixed Edition
+ */
+
+const tg = window.Telegram?.WebApp;
 if (tg) {
     tg.expand();
     tg.ready();
@@ -9,30 +12,31 @@ let peer;
 let activeConn = null;
 let isHost = false;
 let syncIgnore = false;
-let currentVideoId = ""; // Храним ID для синхронизации новых подключений
+let currentVideoId = ""; 
 
 // 1. YouTube API Ready
 function onYouTubeIframeAPIReady() {
-    console.log("YouTube API готов.");
+    console.log("YouTube API загружен.");
     checkUrlParams();
 }
 
-// 2. Проверка входа
+// 2. Проверка параметров входа
 function checkUrlParams() {
-    const startParam = tg.initDataUnsafe?.start_param;
+    const startParam = tg?.initDataUnsafe?.start_param;
     if (startParam && startParam.startsWith('room_')) {
         const hostId = startParam.replace('room_', '');
         joinRoom(hostId);
     }
 }
 
-// 3. Старт (Хост)
+// 3. Создание комнаты (Хост)
 function startMovie() {
     const url = document.getElementById('video-url').value;
     const videoId = extractVideoID(url);
 
     if (!videoId) {
-        alert("Пожалуйста, введите корректную ссылку на YouTube");
+        if (tg) tg.showAlert("Пожалуйста, введите корректную ссылку на YouTube");
+        else alert("Некорректная ссылка");
         return;
     }
 
@@ -41,19 +45,24 @@ function startMovie() {
     initPeer(videoId);
 }
 
-// 4. Подключение (Гость)
+// 4. Подключение к комнате (Гость)
 function joinRoom(hostId) {
     isHost = false;
     initPeer(null, hostId);
 }
 
-// 5. PeerJS
+// 5. Работа с PeerJS
 function initPeer(videoId, remoteId = null) {
-    // Создаем Peer без параметров (использует дефолтные облачные серверы PeerJS)
+    // Если библиотеки нет, выводим ошибку
+    if (typeof Peer === 'undefined') {
+        alert("Ошибка: Библиотека PeerJS не загружена!");
+        return;
+    }
+
     peer = new Peer();
 
-    peer.on('open', (id) => {
-        console.log("Peer ID:", id);
+    peer.on('open', (myId) => {
+        console.log("Ваш Peer ID:", myId);
         if (remoteId) {
             connectToHost(remoteId);
         } else {
@@ -65,23 +74,22 @@ function initPeer(videoId, remoteId = null) {
         activeConn = conn;
         setupCommunication();
         
-        // Ждем готовности плеера перед отправкой данных гостю
-        const checkReady = setInterval(() => {
+        // Ждем, пока плеер создастся, прежде чем синхронизировать гостя
+        const waitPlayer = setInterval(() => {
             if (player && player.getCurrentTime) {
                 sendData({
                     type: 'init_sync',
                     vId: currentVideoId,
                     currentTime: player.getCurrentTime()
                 });
-                clearInterval(checkReady);
+                clearInterval(waitPlayer);
                 appendMessage("Система", "Друг подключился", "system");
             }
-        }, 500);
+        }, 1000);
     });
 
     peer.on('error', (err) => {
-        console.error("Peer error:", err);
-        alert("Ошибка связи. Попробуйте обновить страницу.");
+        console.error("Ошибка PeerJS:", err);
     });
 }
 
@@ -90,8 +98,10 @@ function connectToHost(hostId) {
     setupCommunication();
 }
 
+// 6. Обработка входящих данных
 function setupCommunication() {
     activeConn.on('data', (data) => {
+        console.log("Данные получены:", data);
         switch (data.type) {
             case 'init_sync':
                 currentVideoId = data.vId;
@@ -107,17 +117,20 @@ function setupCommunication() {
     });
 }
 
-// 6. Плеер
+// 7. Управление плеером
 function createPlayer(vId, startTime = 0) {
     document.getElementById('setup-screen').classList.add('hidden');
     document.getElementById('main-app').classList.remove('hidden');
 
     player = new YT.Player('yt-player', {
+        height: '100%',
+        width: '100%',
         videoId: vId,
         playerVars: {
             'autoplay': 1,
             'controls': 1,
             'start': Math.floor(startTime),
+            'rel': 0,
             'origin': window.location.origin
         },
         events: {
@@ -129,16 +142,19 @@ function createPlayer(vId, startTime = 0) {
 function onPlayerStateChange(event) {
     if (!activeConn || syncIgnore) return;
 
+    const state = event.data;
     const time = player.getCurrentTime();
-    if (event.data === YT.PlayerState.PLAYING) {
+
+    if (state === YT.PlayerState.PLAYING) {
         sendData({ type: 'media_control', action: 'play', time: time });
-    } else if (event.data === YT.PlayerState.PAUSED) {
+    } else if (state === YT.PlayerState.PAUSED) {
         sendData({ type: 'media_control', action: 'pause', time: time });
     }
 }
 
 function handleRemoteControl(data) {
-    syncIgnore = true;
+    syncIgnore = true; 
+    
     if (data.action === 'play') {
         player.seekTo(data.time, true);
         player.playVideo();
@@ -146,10 +162,12 @@ function handleRemoteControl(data) {
         player.pauseVideo();
         player.seekTo(data.time, true);
     }
+    
+    // Даем небольшую задержку, чтобы событие изменения состояния не отправилось обратно
     setTimeout(() => { syncIgnore = false; }, 800);
 }
 
-// 7. Утилиты
+// 8. Утилиты
 function extractVideoID(url) {
     const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?v=)|(&v=))([^#&?]*).*/;
     const match = url.match(regExp);
@@ -172,14 +190,8 @@ function sendMsg() {
     input.value = '';
 }
 
-// Отправка по нажатию Enter
-document.getElementById('msg-input')?.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') sendMsg();
-});
-
 function appendMessage(user, text, style) {
     const container = document.getElementById('messages');
-    if (!container) return;
     const div = document.createElement('div');
     div.className = `msg ${style}`;
     div.innerHTML = `<b>${user}:</b> ${text}`;
@@ -188,14 +200,16 @@ function appendMessage(user, text, style) {
 }
 
 function inviteFriend() {
-    const botUrl = "https://kronos2008.github.io/Test1/"; // ЗАМЕНИ НА СВОЕ
+    // ЗАМЕНИТЬ НА ВАШУ ССЫЛКУ БОТА
+    const botUrl = "https://kronos2008.github.io/Test1/"; 
     const inviteLink = `${botUrl}?startapp=room_${peer.id}`;
     
     if (navigator.clipboard) {
         navigator.clipboard.writeText(inviteLink).then(() => {
-            alert("Ссылка скопирована!");
+            if (tg) tg.showAlert("Ссылка скопирована!");
+            else alert("Ссылка скопирована!");
         });
     } else {
-        alert("Твоя ссылка: " + inviteLink);
+        alert("Скопируйте вручную: " + inviteLink);
     }
 }
