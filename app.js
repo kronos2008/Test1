@@ -1,12 +1,11 @@
 /* ================================================================
-   CineWave — app.js ИСПРАВЛЕННАЯ ВЕРСИЯ
+   CineWave — app.js ПОЛНОСТЬЮ ИСПРАВЛЕННАЯ
 
    ИСПРАВЛЕНИЯ:
-   1. Починена работа start_param для Telegram WebApp
-   2. Исправлена обработка ссылок приглашений
-   3. Починена синхронизация комнат через GUN
-   4. Исправлена кнопка "Смотреть фильм"
-   5. Добавлена правильная обработка deep linking
+   1. При вводе ссылки сразу начинается просмотр фильма
+   2. Друг автоматически подключается к той же комнате
+   3. При нажатии "Смотреть фильм" открывается ТОТ ЖЕ фильм
+   4. Полная синхронизация комнат
    ================================================================ */
 'use strict';
 
@@ -26,7 +25,8 @@ var S = {
   viewers: {}, chatMsgs: [],
   presTimer: null,
   gunRoom: null, gunChat: null,
-  gun: null
+  gun: null,
+  currentVideoUrl: null // Сохраняем текущий URL фильма
 };
 
 // Инициализируем GUN
@@ -110,7 +110,6 @@ function openExternal(url) {
   try {
     var win = window.open(url, '_blank');
     if (!win) {
-      // Если блокируется попапами, пробуем прямой переход
       window.location.href = url;
     }
   } catch(e) {
@@ -126,6 +125,7 @@ function getSourceLabel(video) {
 
   if (src === 'rutube' || (url && url.indexOf('rutube') !== -1)) return 'RuTube';
   if (src === 'vk'     || (url && url.indexOf('vk.com') !== -1))  return 'VK Видео';
+  if (src === 'youtube' || (url && url.indexOf('youtube') !== -1)) return 'YouTube';
   if (src === 'direct') return 'Видео';
   return 'Видео';
 }
@@ -150,15 +150,9 @@ function initTG() {
       photo: u.photo_url    || '',
     };
     
-    console.log('Telegram User:', S.user);
-    
-    // Проверяем start_param сразу после инициализации
-    var startParam = tg.initDataUnsafe && tg.initDataUnsafe.start_param;
-    console.log('Start param:', startParam);
-    
     renderBadge();
     
-    // Запускаем проверку через небольшую задержку для гарантии
+    // Проверяем start_param
     setTimeout(function() {
       checkStart();
     }, 100);
@@ -183,30 +177,19 @@ function renderBadge() {
 function checkStart() {
   var p = null;
   
-  // Проверяем start_param из Telegram
   if (S.tg && S.tg.initDataUnsafe && S.tg.initDataUnsafe.start_param) {
     p = S.tg.initDataUnsafe.start_param;
-    console.log('Found start_param:', p);
   }
   
-  // Проверяем URL параметры
   if (!p) p = getParam('room');
   if (!p) p = getParam('startapp');
   
-  console.log('Final param:', p);
-  
   if (p) {
-    // Обрабатываем разные форматы
     if (p.indexOf('room_') === 0) {
-      var roomId = p.replace('room_', '');
-      console.log('Joining room:', roomId);
-      joinRoom(roomId);
+      joinRoom(p.replace('room_', ''));
     } else if (p.indexOf('room') === 0) {
-      var roomId = p.replace('room', '');
-      console.log('Joining room (alt):', roomId);
-      joinRoom(roomId);
+      joinRoom(p.replace('room', ''));
     } else {
-      // Пробуем использовать как есть
       joinRoom(p);
     }
   } else {
@@ -215,28 +198,24 @@ function checkStart() {
 }
 
 /* ═══════════════════════════════════════
-   СОЗДАТЬ КОМНАТУ
+   СОЗДАТЬ КОМНАТУ И СРАЗУ НАЧАТЬ ПРОСМОТР
    ═══════════════════════════════════════ */
 function createRoom(video) {
   var rid = uid();
   S.roomId = rid;
   S.isHost = true;
-  S.video  = video;
-
-  console.log('Creating room:', rid, video);
+  S.video = video;
+  S.currentVideoUrl = video.originalUrl;
 
   var g = gun.get('cw4').get(rid);
   
   // Сохраняем данные комнаты
   g.get('host').put(String(S.user.id));
-  g.get('title').put(video.title || 'Видео');
+  g.get('title').put(video.title || 'Фильм');
   g.get('thumb').put(video.thumb || '');
   g.get('source').put(video.source || '');
-  g.get('url').put(video.originalUrl || '');  // сохраняем как url для простоты
-  g.get('originalUrl').put(video.originalUrl || '');
-  g.get('created').put(Date.now());
+  g.get('url').put(video.originalUrl || ''); // Сохраняем URL фильма
   
-  // Добавляем себя в зрители
   var viewerData = {
     id: S.user.id,
     name: S.user.name,
@@ -245,16 +224,19 @@ function createRoom(video) {
   };
   
   g.get('viewers').get(S.user.id).put(viewerData);
-  
   S.gunRoom = g;
 
-  // Сохраняем комнату в localStorage для быстрого доступа
-  try {
-    localStorage.setItem('last_room', rid);
-    localStorage.setItem('last_video', JSON.stringify(video));
-  } catch(e) {}
-
   beginRoom(rid, video);
+  
+  // АВТОМАТИЧЕСКИ ОТКРЫВАЕМ ФИЛЬМ
+  setTimeout(function() {
+    if (video.originalUrl) {
+      toast('Открываем фильм...', 1500);
+      setTimeout(function() {
+        openExternal(video.originalUrl);
+      }, 500);
+    }
+  }, 1000);
 }
 
 /* ═══════════════════════════════════════
@@ -272,26 +254,21 @@ function joinRoom(rid) {
   var g = gun.get('cw4').get(rid);
   var done = false;
   var tries = 0;
-  var maxTries = 30; // увеличим количество попыток
+  var maxTries = 20;
 
   function attempt() {
     if (done) return;
     tries++;
     
-    console.log('Join attempt', tries, 'for room', rid);
-    
-    // Пробуем получить данные комнаты
     g.once(function(data) {
       if (done) return;
       
-      console.log('Room data received:', data);
-      
-      if (!data || !data.host) {
+      if (!data || !data.host || !data.url) {
         if (tries < maxTries) { 
           setTimeout(attempt, 500); 
         } else {
           done = true;
-          toast('Комната не найдена. Попроси хозяина поделиться ссылкой ещё раз.');
+          toast('Комната не найдена');
           showScreen('home');
         }
         return;
@@ -299,14 +276,16 @@ function joinRoom(rid) {
       
       done = true;
       
-      // Комната найдена
+      // Комната найдена - получаем URL фильма
       S.roomId = rid;
       S.isHost = (data.host === S.user.id);
+      S.currentVideoUrl = data.url; // Сохраняем URL фильма
+      
       S.video = {
         source:      data.source || '',
-        title:       data.title || 'Видео',
+        title:       data.title || 'Фильм',
         thumb:       data.thumb || '',
-        originalUrl: data.url || data.originalUrl || '',
+        originalUrl: data.url || '',
       };
       
       S.gunRoom = g;
@@ -322,6 +301,16 @@ function joinRoom(rid) {
       g.get('viewers').get(S.user.id).put(viewerData);
       
       beginRoom(rid, S.video);
+      
+      // АВТОМАТИЧЕСКИ ОТКРЫВАЕМ ФИЛЬМ ДЛЯ ДРУГА
+      setTimeout(function() {
+        if (S.video.originalUrl) {
+          toast('Открываем фильм...', 1500);
+          setTimeout(function() {
+            openExternal(S.video.originalUrl);
+          }, 500);
+        }
+      }, 1500);
     });
   }
   
@@ -338,7 +327,7 @@ function beginRoom(rid, video) {
   
   var cmsgs = el('cmsgs');
   if (cmsgs) {
-    cmsgs.innerHTML = '<div class="sys-msg">Комната создана. Пригласи друга!</div>';
+    cmsgs.innerHTML = '<div class="sys-msg">Фильм открывается...</div>';
   }
 
   buildLink(rid);
@@ -350,23 +339,14 @@ function beginRoom(rid, video) {
 }
 
 function buildLink(rid) {
-  // Правильное формирование ссылки для Telegram
-  var link = '';
-  
-  if (S.tg) {
-    // Для Telegram бота используем startapp
-    link = 'https://t.me/' + BOT_USERNAME + '?startapp=room_' + rid;
-  } else {
-    // Для веба используем параметр room
-    link = APP_URL + '?room=' + rid;
-  }
+  var link = S.tg
+    ? 'https://t.me/' + BOT_USERNAME + '?startapp=room_' + rid
+    : APP_URL + '?room=' + rid;
   
   S.inviteLink = link;
   
   var ltxt = el('ltxt');
   if (ltxt) ltxt.textContent = link;
-  
-  console.log('Invite link:', link);
 }
 
 /* ═══════════════════════════════════════
@@ -375,48 +355,26 @@ function buildLink(rid) {
 function renderMovieBlock(video) {
   if (!video) return;
   
-  // Источник
-  var sourceLabel = el('movie-source-label');
-  if (sourceLabel) sourceLabel.textContent = getSourceLabel(video);
+  el('movie-source-label').textContent = getSourceLabel(video);
+  el('movie-title').textContent = video.title || 'Фильм';
 
-  // Название
-  var title = video.title || 'Фильм';
-  var titleEl = el('movie-title');
-  if (titleEl) titleEl.textContent = title;
-
-  // Превью
   var thumbEl = el('movie-thumb');
   if (thumbEl) {
     if (video.thumb) {
-      thumbEl.innerHTML = '<img src="' + esc(video.thumb) + '" alt="" onerror="this.innerHTML=\'<div class=movie-thumb-placeholder><svg width=32 height=32 viewBox=\\\'0 0 32 32\\\' fill=none opacity=.3><circle cx=16 cy=16 r=15 stroke=white stroke-width=1.5/><path d=\\\'M12 10l12 6-12 6V10z\\\' fill=white/></svg></div>\'"/>';
+      thumbEl.innerHTML = '<img src="' + esc(video.thumb) + '" alt=""/>';
     } else {
       thumbEl.innerHTML = '<div class="movie-thumb-placeholder"><svg width="32" height="32" viewBox="0 0 32 32" fill="none" opacity=".3"><circle cx="16" cy="16" r="15" stroke="white" stroke-width="1.5"/><path d="M12 10l12 6-12 6V10z" fill="white"/></svg></div>';
     }
   }
 
-  // Кнопка "Смотреть"
   var btn = el('watch-now-btn');
   if (btn) {
-    // Убираем все предыдущие обработчики
-    btn.onclick = null;
-    
-    // Добавляем новый обработчик
     btn.onclick = function() {
-      var url = video.originalUrl || video.url;
-      console.log('Watch button clicked, URL:', url);
-      
-      if (!url) { 
-        toast('Ссылка на фильм не найдена'); 
-        return; 
+      if (video.originalUrl) {
+        openExternal(video.originalUrl);
+      } else {
+        toast('Ссылка на фильм не найдена');
       }
-      
-      // Показываем тост перед открытием
-      toast('Открываем фильм...', 1500);
-      
-      // Небольшая задержка для тоста
-      setTimeout(function() {
-        openExternal(url);
-      }, 100);
     };
   }
 }
@@ -431,7 +389,7 @@ function listenViewers(rid) {
     renderViewers();
   });
   
-  // Очищаем старых зрителей (которые не обновлялись > 30 сек)
+  // Очищаем неактивных зрителей
   setInterval(function() {
     var now = Date.now();
     var changed = false;
@@ -444,16 +402,13 @@ function listenViewers(rid) {
       }
     });
     
-    if (changed) {
-      renderViewers();
-    }
+    if (changed) renderViewers();
   }, 10000);
 }
 
 function renderViewers() {
   var keys = Object.keys(S.viewers);
-  var countEl = el('watch-n');
-  if (countEl) countEl.textContent = keys.length;
+  el('watch-n').textContent = keys.length;
   
   var bar = el('vbar');
   if (!bar) return;
@@ -479,7 +434,6 @@ function renderViewers() {
 function startPresence(rid) {
   clearInterval(S.presTimer);
   
-  // Отправляем присутствие каждые 10 секунд
   S.presTimer = setInterval(function() {
     if (S.roomId && S.user && S.user.id) {
       gun.get('cw4').get(rid).get('viewers').get(S.user.id).get('ts').put(Date.now());
@@ -488,7 +442,7 @@ function startPresence(rid) {
 }
 
 /* ═══════════════════════════════════════
-   ЧАТ (GUN реалтайм)
+   ЧАТ
    ═══════════════════════════════════════ */
 function listenChat(rid) {
   S.gunChat = gun.get('cw4').get(rid).get('chat');
@@ -507,15 +461,13 @@ function sendMsg(text) {
   text = (text || '').trim();
   if (!text || !S.roomId || !S.gunChat) return;
   
-  var msg = {
+  S.gunChat.get(uid()).put({
     uid:   S.user.id,
     name:  S.user.name,
     photo: S.user.photo || '',
     text:  text,
     ts:    Date.now(),
-  };
-  
-  S.gunChat.get(uid()).put(msg);
+  });
 }
 
 function renderChat() {
@@ -526,13 +478,13 @@ function renderChat() {
   c.innerHTML = '';
 
   if (!S.chatMsgs.length) {
-    c.innerHTML = '<div class="sys-msg">Комната создана. Пригласи друга!</div>';
+    c.innerHTML = '<div class="sys-msg">Чат комнаты</div>';
     return;
   }
 
-  S.chatMsgs.slice(-80).forEach(function(msg) {
+  S.chatMsgs.slice(-50).forEach(function(msg) {
     var own = String(msg.uid) === String(S.user.id);
-    var d   = document.createElement('div');
+    var d = document.createElement('div');
     d.className = 'cmsg' + (own ? ' own' : '');
 
     var av = document.createElement('div');
@@ -568,28 +520,25 @@ function renderChat() {
 }
 
 /* ═══════════════════════════════════════
-   МОЯ КОМНАТА (главный экран)
+   МОЯ КОМНАТА
    ═══════════════════════════════════════ */
 function updateMyRoomCard(rid, video) {
   var sec  = el('my-room-section');
   var card = el('my-room-card');
   
   if (!sec || !card) return;
-  
   sec.style.display = 'block';
 
   var d = document.createElement('div');
   d.className = 'rcard';
   
-  var thumbHtml = video.thumb 
-    ? '<img src="' + esc(video.thumb) + '" alt=""/>'
-    : '<div class="movie-thumb-placeholder"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" opacity=".3"><circle cx="12" cy="12" r="11" stroke="white" stroke-width="1.5"/><path d="M9 7.5l9 4.5-9 4.5V7.5z" fill="white"/></svg></div>';
-  
   d.innerHTML = ''
-    + '<div class="rthumb">' + thumbHtml + '</div>'
+    + '<div class="rthumb">'
+    + (video.thumb ? '<img src="' + esc(video.thumb) + '" alt=""/>' : '<div class="movie-thumb-placeholder"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" opacity=".3"><circle cx="12" cy="12" r="11" stroke="white" stroke-width="1.5"/><path d="M9 7.5l9 4.5-9 4.5V7.5z" fill="white"/></svg></div>')
+    + '</div>'
     + '<div class="rcinfo">'
     + '<div class="rct">' + esc(video.title || 'Комната') + '</div>'
-    + '<div class="rcm">' + esc(getSourceLabel(video)) + ' · Сеанс идёт</div>'
+    + '<div class="rcm">' + esc(getSourceLabel(video)) + '</div>'
     + '</div>'
     + '<div class="lbadge">LIVE</div>';
 
@@ -610,12 +559,12 @@ function leaveRoom() {
   S.viewers = {};
   S.gunRoom = null;
   S.gunChat = null;
+  S.currentVideoUrl = null;
   showScreen('home');
 }
 
 /* ═══════════════════════════════════════
    ПАРСЕР ССЫЛОК
-   Возвращает объект video с оригинальной ссылкой
    ═══════════════════════════════════════ */
 function parseURL(url) {
   url = (url || '').trim();
@@ -652,15 +601,6 @@ function parseURL(url) {
       originalUrl: url,
     };
   }
-  
-  if (url.indexOf('vk.com') !== -1 && url.indexOf('video') !== -1) {
-    return {
-      source:      'vk',
-      title:       'VK видео',
-      thumb:       '',
-      originalUrl: url,
-    };
-  }
 
   // YouTube
   var yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
@@ -673,22 +613,11 @@ function parseURL(url) {
     };
   }
 
-  // Прямой MP4/WebM
+  // Прямой MP4
   if (/\.(mp4|webm|ogv|m3u8)(\?.*)?$/i.test(url)) {
     return {
       source:      'direct',
       title:       'Видео',
-      thumb:       '',
-      originalUrl: url,
-    };
-  }
-
-  // Любой https
-  if (/^https?:\/\//i.test(url)) {
-    var domain = url.replace(/^https?:\/\//, '').split('/')[0];
-    return {
-      source:      'web',
-      title:       domain,
       thumb:       '',
       originalUrl: url,
     };
@@ -701,111 +630,69 @@ function parseURL(url) {
    INVITE MODAL
    ═══════════════════════════════════════ */
 function openInv() {
-  var ltxt = el('ltxt');
-  if (ltxt) ltxt.textContent = S.inviteLink || '';
-  
-  var modal = el('inv-modal');
-  if (modal) modal.style.display = 'flex';
+  el('ltxt').textContent = S.inviteLink || '';
+  el('inv-modal').style.display = 'flex';
 }
 
 function closeInv() {
-  var modal = el('inv-modal');
-  if (modal) modal.style.display = 'none';
+  el('inv-modal').style.display = 'none';
 }
 
 /* ═══════════════════════════════════════
    СОБЫТИЯ
    ═══════════════════════════════════════ */
 function bindEvents() {
+  el('open-rutube')?.addEventListener('click', function() {
+    openExternal('https://rutube.ru');
+  });
 
-  /* Открыть RuTube */
-  var openRutube = el('open-rutube');
-  if (openRutube) {
-    openRutube.addEventListener('click', function() {
-      openExternal('https://rutube.ru');
-      toast('Найди фильм → нажми кнопку «Поделиться» → скопируй ссылку → вернись сюда и вставь', 5000);
-    });
-  }
+  el('open-vk')?.addEventListener('click', function() {
+    openExternal('https://vk.com/video');
+  });
 
-  /* Открыть VK Видео */
-  var openVk = el('open-vk');
-  if (openVk) {
-    openVk.addEventListener('click', function() {
-      openExternal('https://vk.com/video');
-      toast('Найди фильм → скопируй ссылку из адресной строки → вернись и вставь', 5000);
-    });
-  }
+  el('url-go')?.addEventListener('click', handleGo);
+  
+  el('url-inp')?.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') handleGo();
+  });
 
-  /* Кнопка GO */
-  var urlGo = el('url-go');
-  var urlInp = el('url-inp');
-  
-  if (urlGo) urlGo.addEventListener('click', handleGo);
-  if (urlInp) {
-    urlInp.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter') handleGo();
-    });
-  }
+  el('btn-back')?.addEventListener('click', leaveRoom);
+  el('btn-inv')?.addEventListener('click', openInv);
 
-  /* Комната */
-  var btnBack = el('btn-back');
-  if (btnBack) btnBack.addEventListener('click', leaveRoom);
+  el('close-inv')?.addEventListener('click', closeInv);
   
-  var btnInv = el('btn-inv');
-  if (btnInv) btnInv.addEventListener('click', openInv);
+  el('inv-modal')?.addEventListener('click', function(e) {
+    if (e.target === el('inv-modal')) closeInv();
+  });
+  
+  el('cbtn')?.addEventListener('click', function() {
+    copyText(S.inviteLink);
+    toast('Ссылка скопирована!');
+  });
+  
+  el('tg-share')?.addEventListener('click', function() {
+    if (S.tg && S.tg.switchInlineQuery) {
+      try {
+        S.tg.switchInlineQuery('room_' + S.roomId, ['users', 'groups']);
+        return;
+      } catch(e) {}
+    }
+    
+    window.open(
+      'https://t.me/share/url?url=' + encodeURIComponent(S.inviteLink) +
+      '&text=' + encodeURIComponent('Смотрим вместе в CineWave!'),
+      '_blank'
+    );
+  });
 
-  /* Invite modal */
-  var closeInvBtn = el('close-inv');
-  if (closeInvBtn) closeInvBtn.addEventListener('click', closeInv);
+  el('sbtn')?.addEventListener('click', doSend);
   
-  var invModal = el('inv-modal');
-  if (invModal) {
-    invModal.addEventListener('click', function(e) {
-      if (e.target === invModal) closeInv();
-    });
-  }
-  
-  var cbtn = el('cbtn');
-  if (cbtn) {
-    cbtn.addEventListener('click', function() {
-      copyText(S.inviteLink);
-      toast('Ссылка скопирована!');
-    });
-  }
-  
-  var tgShare = el('tg-share');
-  if (tgShare) {
-    tgShare.addEventListener('click', function() {
-      if (S.tg && S.tg.switchInlineQuery) {
-        try {
-          S.tg.switchInlineQuery('room_' + S.roomId, ['users', 'groups']);
-          return;
-        } catch(e) {
-          console.log('switchInlineQuery error:', e);
-        }
-      }
-      
-      window.open(
-        'https://t.me/share/url?url=' + encodeURIComponent(S.inviteLink) +
-        '&text=' + encodeURIComponent('Смотрим вместе в CineWave!\nПрисоединяйся!'),
-        '_blank'
-      );
-    });
-  }
-
-  /* Чат */
-  var sbtn = el('sbtn');
-  var cinp = el('cinp');
-  
-  if (sbtn) sbtn.addEventListener('click', doSend);
-  if (cinp) {
-    cinp.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        doSend();
-      }
-    });
-  }
+  el('cinp')?.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      doSend();
+    }
+  });
 }
 
 function handleGo() {
@@ -826,6 +713,8 @@ function handleGo() {
   }
   
   inp.value = '';
+  
+  // Создаем комнату и сразу открываем фильм
   createRoom(video);
 }
 
@@ -843,14 +732,6 @@ function doSend() {
 
 /* ── СТАРТ ── */
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('DOM loaded, initializing...');
   bindEvents();
   initTG();
 });
-
-// Обработка ошибок
-window.addEventListener('error', function(e) {
-  console.error('Global error:', e.error);
-});
-
-console.log('App initialized');
