@@ -1,10 +1,11 @@
 /* ================================================================
-   CineWave — app.js С ПЛЕЕРОМ ВНУТРИ ПРИЛОЖЕНИЯ
+   CineWave — app.js ПРОСТОЕ РАБОЧЕЕ РЕШЕНИЕ
 
-   ТЕПЕРЬ:
-   1. Фильм открывается ВНУТРИ приложения (как на скриншоте)
-   2. Плеер показывается прямо в комнате
-   3. Чат и фильм на одном экране
+   КАК РАБОТАЕТ:
+   1. Вставляешь ссылку на фильм
+   2. Создаётся комната
+   3. При нажатии "Смотреть" открывается фильм в отдельном окне
+   4. Друг делает то же самое
    ================================================================ */
 'use strict';
 
@@ -23,14 +24,10 @@ var S = {
   roomId: null, isHost: false, video: null, inviteLink: '',
   viewers: {}, chatMsgs: [],
   presTimer: null,
-  gunRoom: null, gunChat: null,
-  gun: null,
-  playerMode: false // Режим плеера
+  gunRoom: null, gunChat: null
 };
 
-// Инициализируем GUN
-var gun = Gun({ peers: GUN_PEERS, localStorage: false });
-S.gun = gun;
+var gun = Gun(GUN_PEERS);
 
 /* ── DOM ── */
 function el(id)  { return document.getElementById(id); }
@@ -90,54 +87,46 @@ function getParam(k) {
   try { return new URLSearchParams(window.location.search).get(k); } catch(e) { return null; }
 }
 
-/* ── ПОЛУЧИТЬ ID ВИДЕО ИЗ ССЫЛКИ ── */
-function extractVideoId(url) {
-  // RuTube
-  var rt = url.match(/rutube\.ru\/video\/([a-zA-Z0-9]+)/);
-  if (rt) return { type: 'rutube', id: rt[1] };
+/* ── ОТКРЫТЬ ССЫЛКУ ── */
+function openExternal(url) {
+  if (!url) {
+    toast('Ссылка на фильм не найдена');
+    return;
+  }
   
-  // VK видео
-  var vk = url.match(/vk\.com\/video(-?\d+)_(\d+)/);
-  if (vk) return { type: 'vk', id: vk[1] + '_' + vk[2] };
+  console.log('Opening URL:', url);
   
-  // VK клип
-  var clip = url.match(/vk\.com\/clip(-?\d+)_(\d+)/);
-  if (clip) return { type: 'vk', id: clip[1] + '_' + clip[2] };
+  // Пробуем открыть через Telegram
+  if (S.tg && S.tg.openLink) {
+    try { 
+      S.tg.openLink(url); 
+      return; 
+    } catch(e) {
+      console.log('Telegram openLink error:', e);
+    }
+  }
   
-  // YouTube
-  var yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
-  if (yt) return { type: 'youtube', id: yt[1] };
-  
-  return null;
+  // Пробуем открыть через window.open
+  try {
+    var win = window.open(url, '_blank');
+    if (!win) {
+      // Если заблокировано, пробуем прямой переход
+      window.location.href = url;
+    }
+  } catch(e) {
+    console.log('Window open error:', e);
+    toast('Не удалось открыть ссылку');
+  }
 }
 
-/* ── СОЗДАТЬ HTML ДЛЯ ПЛЕЕРА ── */
-function createPlayerHTML(video) {
-  if (!video || !video.originalUrl) return '<div class="player-error">Ссылка на фильм не найдена</div>';
+/* ── ПОЛУЧИТЬ НАЗВАНИЕ ИСТОЧНИКА ── */
+function getSourceLabel(video) {
+  if (!video) return '';
   
-  var videoId = extractVideoId(video.originalUrl);
-  
-  if (!videoId) {
-    // Если не можем распознать, пробуем embed
-    return '<iframe src="' + esc(video.originalUrl) + '" frameborder="0" allowfullscreen="1" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" style="width:100%;height:100%;"></iframe>';
-  }
-  
-  switch(videoId.type) {
-    case 'rutube':
-      // RuTube плеер
-      return '<iframe src="https://rutube.ru/play/embed/' + videoId.id + '" frameborder="0" allowfullscreen="1" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" style="width:100%;height:100%;"></iframe>';
-      
-    case 'vk':
-      // VK плеер
-      return '<iframe src="https://vk.com/video_ext.php?oid=' + videoId.id.split('_')[0] + '&id=' + videoId.id.split('_')[1] + '&hd=1&autoplay=1" frameborder="0" allowfullscreen="1" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" style="width:100%;height:100%;"></iframe>';
-      
-    case 'youtube':
-      // YouTube плеер
-      return '<iframe src="https://www.youtube.com/embed/' + videoId.id + '?autoplay=1" frameborder="0" allowfullscreen="1" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" style="width:100%;height:100%;"></iframe>';
-      
-    default:
-      return '<iframe src="' + esc(video.originalUrl) + '" frameborder="0" allowfullscreen="1" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" style="width:100%;height:100%;"></iframe>';
-  }
+  if (video.source === 'rutube') return 'RuTube';
+  if (video.source === 'vk') return 'VK Видео';
+  if (video.source === 'youtube') return 'YouTube';
+  return 'Видео';
 }
 
 /* ═══ TELEGRAM INIT ═══ */
@@ -159,18 +148,12 @@ function initTG() {
       last:  u.last_name    || '',
       photo: u.photo_url    || '',
     };
-    
-    renderBadge();
-    
-    setTimeout(function() {
-      checkStart();
-    }, 100);
-    
   } else {
     S.user = { id: 'dev_' + uid(), name: 'Тест', last: '', photo: '' };
-    renderBadge();
-    checkStart();
   }
+  
+  renderBadge();
+  checkStart();
 }
 
 function renderBadge() {
@@ -192,13 +175,9 @@ function checkStart() {
   
   if (!p) p = getParam('room');
   if (!p) p = getParam('startapp');
-  
-  if (p) {
-    if (p.indexOf('room_') === 0) {
-      joinRoom(p.replace('room_', ''));
-    } else {
-      joinRoom(p);
-    }
+
+  if (p && p.indexOf('room_') === 0) {
+    joinRoom(p.replace('room_', ''));
   } else {
     showScreen('home');
   }
@@ -211,34 +190,28 @@ function createRoom(video) {
   var rid = uid();
   S.roomId = rid;
   S.isHost = true;
-  S.video = video;
+  S.video  = video;
+
+  console.log('Creating room:', rid, video);
 
   var g = gun.get('cw4').get(rid);
-  
   g.get('host').put(String(S.user.id));
-  g.get('title').put(video.title || 'Фильм');
+  g.get('title').put(video.title || 'Видео');
   g.get('thumb').put(video.thumb || '');
   g.get('source').put(video.source || '');
   g.get('url').put(video.originalUrl || '');
+  g.get('created').put(Date.now());
   
-  var viewerData = {
+  g.get('viewers').get(S.user.id).put({
     id: S.user.id,
     name: S.user.name,
     photo: S.user.photo || '',
     ts: Date.now()
-  };
+  });
   
-  g.get('viewers').get(S.user.id).put(viewerData);
   S.gunRoom = g;
 
   beginRoom(rid, video);
-  
-  // АВТОМАТИЧЕСКИ ВКЛЮЧАЕМ ПЛЕЕР
-  setTimeout(function() {
-    if (video.originalUrl) {
-      showPlayer();
-    }
-  }, 500);
 }
 
 /* ═══════════════════════════════════════
@@ -278,35 +251,27 @@ function joinRoom(rid) {
       
       done = true;
       
+      console.log('Joined room:', rid, data);
+      
       S.roomId = rid;
       S.isHost = (data.host === S.user.id);
-      
       S.video = {
         source:      data.source || '',
-        title:       data.title || 'Фильм',
+        title:       data.title || 'Видео',
         thumb:       data.thumb || '',
         originalUrl: data.url || '',
       };
       
       S.gunRoom = g;
       
-      var viewerData = {
+      g.get('viewers').get(S.user.id).put({
         id: S.user.id,
         name: S.user.name,
         photo: S.user.photo || '',
         ts: Date.now()
-      };
-      
-      g.get('viewers').get(S.user.id).put(viewerData);
+      });
       
       beginRoom(rid, S.video);
-      
-      // АВТОМАТИЧЕСКИ ВКЛЮЧАЕМ ПЛЕЕР ДЛЯ ДРУГА
-      setTimeout(function() {
-        if (S.video.originalUrl) {
-          showPlayer();
-        }
-      }, 1000);
     });
   }
   
@@ -320,14 +285,7 @@ function beginRoom(rid, video) {
   toastClear();
   showScreen('room');
   S.chatMsgs = [];
-  
-  // Скрываем плеер при входе в комнату
-  hidePlayer();
-  
-  var cmsgs = el('cmsgs');
-  if (cmsgs) {
-    cmsgs.innerHTML = '<div class="sys-msg">Комната создана. Фильм сейчас начнется...</div>';
-  }
+  el('cmsgs').innerHTML = '<div class="sys-msg">Комната создана. Нажми "Смотреть" чтобы начать просмотр!</div>';
 
   buildLink(rid);
   renderMovieBlock(video);
@@ -337,68 +295,13 @@ function beginRoom(rid, video) {
   updateMyRoomCard(rid, video);
 }
 
-/* ═══════════════════════════════════════
-   ПОКАЗАТЬ/СКРЫТЬ ПЛЕЕР
-   ═══════════════════════════════════════ */
-function showPlayer() {
-  S.playerMode = true;
-  
-  var movieBlock = el('movie-block');
-  var roomWrap = qs('.room-wrap');
-  var rpanel = qs('.rpanel');
-  
-  if (movieBlock) movieBlock.style.display = 'none';
-  if (rpanel) rpanel.style.display = 'none';
-  
-  // Создаем или показываем плеер
-  var playerContainer = el('player-container');
-  if (!playerContainer) {
-    playerContainer = document.createElement('div');
-    playerContainer.id = 'player-container';
-    playerContainer.className = 'player-container';
-    
-    if (roomWrap) {
-      roomWrap.insertBefore(playerContainer, roomWrap.firstChild);
-    }
-  }
-  
-  playerContainer.style.display = 'block';
-  playerContainer.innerHTML = '<div class="player-header">' +
-    '<button class="back-from-player" id="back-from-player">' +
-    '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="white" stroke-width="2" stroke-linecap="round"/></svg>' +
-    '</button>' +
-    '<span class="player-title">' + esc(S.video.title) + '</span>' +
-    '</div>' +
-    '<div class="player-wrapper">' + createPlayerHTML(S.video) + '</div>';
-  
-  // Добавляем обработчик для кнопки назад
-  var backBtn = el('back-from-player');
-  if (backBtn) {
-    backBtn.addEventListener('click', hidePlayer);
-  }
-}
-
-function hidePlayer() {
-  S.playerMode = false;
-  
-  var movieBlock = el('movie-block');
-  var rpanel = qs('.rpanel');
-  var playerContainer = el('player-container');
-  
-  if (movieBlock) movieBlock.style.display = 'flex';
-  if (rpanel) rpanel.style.display = 'flex';
-  if (playerContainer) playerContainer.style.display = 'none';
-}
-
 function buildLink(rid) {
   var link = S.tg
     ? 'https://t.me/' + BOT_USERNAME + '?startapp=room_' + rid
     : APP_URL + '?room=' + rid;
   
   S.inviteLink = link;
-  
-  var ltxt = el('ltxt');
-  if (ltxt) ltxt.textContent = link;
+  el('ltxt').textContent = link;
 }
 
 /* ═══════════════════════════════════════
@@ -422,27 +325,20 @@ function renderMovieBlock(video) {
   var btn = el('watch-now-btn');
   if (btn) {
     btn.onclick = function() {
-      if (video.originalUrl) {
-        showPlayer(); // Показываем плеер внутри приложения
-      } else {
-        toast('Ссылка на фильм не найдена');
+      console.log('Watch button clicked, URL:', video.originalUrl);
+      
+      if (!video.originalUrl) { 
+        toast('Ссылка на фильм не найдена'); 
+        return; 
       }
+      
+      // Открываем фильм
+      openExternal(video.originalUrl);
+      
+      // Показываем подсказку
+      toast('Фильм открывается в новом окне', 2000);
     };
   }
-}
-
-/* ═══════════════════════════════════════
-   ПОЛУЧИТЬ ИСТОЧНИК
-   ═══════════════════════════════════════ */
-function getSourceLabel(video) {
-  if (!video) return '';
-  var src = video.source || '';
-  var url = video.originalUrl || '';
-
-  if (src === 'rutube' || (url && url.indexOf('rutube') !== -1)) return 'RuTube';
-  if (src === 'vk'     || (url && url.indexOf('vk.com') !== -1))  return 'VK Видео';
-  if (src === 'youtube' || (url && url.indexOf('youtube') !== -1)) return 'YouTube';
-  return 'Видео';
 }
 
 /* ═══════════════════════════════════════
@@ -455,6 +351,7 @@ function listenViewers(rid) {
     renderViewers();
   });
   
+  // Очищаем неактивных
   setInterval(function() {
     var now = Date.now();
     var changed = false;
@@ -624,8 +521,6 @@ function leaveRoom() {
   S.viewers = {};
   S.gunRoom = null;
   S.gunChat = null;
-  S.playerMode = false;
-  hidePlayer();
   showScreen('home');
 }
 
@@ -636,9 +531,10 @@ function parseURL(url) {
   url = (url || '').trim();
   if (!url) return null;
 
+  console.log('Parsing URL:', url);
+
   // RuTube
-  var rt = url.match(/rutube\.ru\/video\/([a-zA-Z0-9]+)/);
-  if (rt) {
+  if (url.includes('rutube.ru') && url.includes('/video/')) {
     return {
       source:      'rutube',
       title:       'RuTube видео',
@@ -648,8 +544,7 @@ function parseURL(url) {
   }
 
   // VK video
-  var vk1 = url.match(/vk\.com\/video(-?\d+)_(\d+)/);
-  if (vk1) {
+  if (url.includes('vk.com/video') || url.includes('vk.com/clip')) {
     return {
       source:      'vk',
       title:       'VK видео',
@@ -657,30 +552,23 @@ function parseURL(url) {
       originalUrl: url,
     };
   }
-  
-  var vk2 = url.match(/vk\.com\/clip(-?\d+)_(\d+)/);
-  if (vk2) {
-    return {
-      source:      'vk',
-      title:       'VK клип',
-      thumb:       '',
-      originalUrl: url,
-    };
-  }
 
   // YouTube
-  var yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
-  if (yt) {
+  if (url.includes('youtube.com') || url.includes('youtu.be')) {
+    var ytId = null;
+    var ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+    if (ytMatch) ytId = ytMatch[1];
+    
     return {
       source:      'youtube',
       title:       'YouTube видео',
-      thumb:       'https://img.youtube.com/vi/' + yt[1] + '/mqdefault.jpg',
+      thumb:       ytId ? 'https://img.youtube.com/vi/' + ytId + '/mqdefault.jpg' : '',
       originalUrl: url,
     };
   }
 
-  // Прямой MP4
-  if (/\.(mp4|webm|ogv|m3u8)(\?.*)?$/i.test(url)) {
+  // Прямая ссылка на видео
+  if (url.match(/\.(mp4|webm|ogv|m3u8)(\?.*)?$/i)) {
     return {
       source:      'direct',
       title:       'Видео',
@@ -699,7 +587,6 @@ function openInv() {
   el('ltxt').textContent = S.inviteLink || '';
   el('inv-modal').style.display = 'flex';
 }
-
 function closeInv() {
   el('inv-modal').style.display = 'none';
 }
@@ -708,35 +595,38 @@ function closeInv() {
    СОБЫТИЯ
    ═══════════════════════════════════════ */
 function bindEvents() {
-  el('open-rutube')?.addEventListener('click', function() {
-    window.open('https://rutube.ru', '_blank');
+
+  el('open-rutube').addEventListener('click', function() {
+    openExternal('https://rutube.ru');
+    toast('Найди фильм → скопируй ссылку → вернись и вставь', 4000);
   });
 
-  el('open-vk')?.addEventListener('click', function() {
-    window.open('https://vk.com/video', '_blank');
+  el('open-vk').addEventListener('click', function() {
+    openExternal('https://vk.com/video');
+    toast('Найди фильм → скопируй ссылку из адресной строки → вернись и вставь', 4000);
   });
 
-  el('url-go')?.addEventListener('click', handleGo);
+  el('url-go').addEventListener('click', handleGo);
   
-  el('url-inp')?.addEventListener('keydown', function(e) {
+  el('url-inp').addEventListener('keydown', function(e) {
     if (e.key === 'Enter') handleGo();
   });
 
-  el('btn-back')?.addEventListener('click', leaveRoom);
-  el('btn-inv')?.addEventListener('click', openInv);
+  el('btn-back').addEventListener('click', leaveRoom);
+  el('btn-inv').addEventListener('click', openInv);
 
-  el('close-inv')?.addEventListener('click', closeInv);
+  el('close-inv').addEventListener('click', closeInv);
   
-  el('inv-modal')?.addEventListener('click', function(e) {
+  el('inv-modal').addEventListener('click', function(e) {
     if (e.target === el('inv-modal')) closeInv();
   });
   
-  el('cbtn')?.addEventListener('click', function() {
+  el('cbtn').addEventListener('click', function() {
     copyText(S.inviteLink);
     toast('Ссылка скопирована!');
   });
   
-  el('tg-share')?.addEventListener('click', function() {
+  el('tg-share').addEventListener('click', function() {
     if (S.tg && S.tg.switchInlineQuery) {
       try {
         S.tg.switchInlineQuery('room_' + S.roomId, ['users', 'groups']);
@@ -751,9 +641,9 @@ function bindEvents() {
     );
   });
 
-  el('sbtn')?.addEventListener('click', doSend);
+  el('sbtn').addEventListener('click', doSend);
   
-  el('cinp')?.addEventListener('keydown', function(e) {
+  el('cinp').addEventListener('keydown', function(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       doSend();
@@ -763,9 +653,8 @@ function bindEvents() {
 
 function handleGo() {
   var inp = el('url-inp');
-  if (!inp) return;
-  
   var url = (inp.value || '').trim();
+  
   if (!url) {
     toast('Вставьте ссылку на фильм');
     inp.focus();
@@ -779,16 +668,12 @@ function handleGo() {
   }
   
   inp.value = '';
-  
-  // Создаем комнату и показываем плеер
   createRoom(video);
 }
 
 function doSend() {
   var inp = el('cinp');
-  if (!inp) return;
-  
-  var v = (inp.value || '').trim();
+  var v   = (inp.value || '').trim();
   if (!v) return;
   
   sendMsg(v);
