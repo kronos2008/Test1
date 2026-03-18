@@ -1,13 +1,4 @@
-/** * Cinema Party Engine v2.3 - Stable GitHub Edition */
-
-// Резервный загрузчик PeerJS, если основной скрипт в head заблокирован
-(function checkPeerLib() {
-    if (typeof Peer === 'undefined') {
-        const s = document.createElement('script');
-        s.src = "https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js";
-        document.head.appendChild(s);
-    }
-})();
+/** * Cinema Party Engine v3.0 - No-Auth Fix */
 
 const tg = window.Telegram?.WebApp;
 if (tg) {
@@ -22,28 +13,23 @@ let isHost = false;
 let syncIgnore = false; 
 let currentVideoId = "";
 
-// 1. YouTube API Ready
 function onYouTubeIframeAPIReady() {
     checkUrlParams(); 
 }
 
-// 2. Проверка входа через Telegram (startapp)
 function checkUrlParams() {
     const startParam = tg?.initDataUnsafe?.start_param;
     if (startParam && startParam.startsWith('room_')) {
-        const hostId = startParam.replace('room_', '');
-        joinRoom(hostId);
+        joinRoom(startParam.replace('room_', ''));
     }
 }
 
-// 3. Создание комнаты (Хост)
 function startMovie() {
     const url = document.getElementById('video-url').value;
     const videoId = extractVideoID(url);
 
     if (!videoId) {
-        if (tg) tg.showAlert("Введите рабочую ссылку на YouTube!");
-        else alert("Некорректная ссылка!");
+        if (tg) tg.showAlert("Введите ссылку на видео!");
         return;
     }
 
@@ -52,21 +38,18 @@ function startMovie() {
     initPeer(videoId);
 }
 
-// 4. Подключение (Гость)
 function joinRoom(hostId) {
     isHost = false;
     initPeer(null, hostId);
 }
 
-// 5. PeerJS Связь
 function initPeer(videoId, remoteId = null) {
     if (typeof Peer === 'undefined') {
-        alert("Сеть еще загружается. Попробуйте через пару секунд.");
+        alert("Ошибка загрузки сети. Подождите 3 сек.");
         return;
     }
 
     peer = new Peer();
-
     peer.on('open', (id) => {
         if (remoteId) connectToHost(remoteId);
         else createPlayer(videoId);
@@ -75,17 +58,11 @@ function initPeer(videoId, remoteId = null) {
     peer.on('connection', (conn) => {
         activeConn = conn;
         setupCommunication();
-        
-        // Синхронизация при подключении гостя
-        const syncCheck = setInterval(() => {
+        const sync = setInterval(() => {
             if (player && player.getCurrentTime) {
-                sendData({
-                    type: 'init_sync',
-                    vId: currentVideoId,
-                    currentTime: player.getCurrentTime()
-                });
-                clearInterval(syncCheck);
-                appendMessage("Система", "Друг вошел в зал", "system");
+                sendData({ type: 'init_sync', vId: currentVideoId, currentTime: player.getCurrentTime() });
+                clearInterval(sync);
+                appendMessage("Система", "Друг вошел", "system");
             }
         }, 1000);
     });
@@ -96,37 +73,37 @@ function connectToHost(hostId) {
     setupCommunication();
 }
 
-// 6. Обработка данных
 function setupCommunication() {
     activeConn.on('data', (data) => {
-        switch (data.type) {
-            case 'init_sync':
-                currentVideoId = data.vId;
-                createPlayer(data.vId, data.currentTime);
-                break;
-            case 'chat':
-                appendMessage("Друг", data.text, "friend");
-                break;
-            case 'media_control':
-                handleRemoteControl(data);
-                break;
+        if (data.type === 'init_sync') {
+            currentVideoId = data.vId;
+            createPlayer(data.vId, data.currentTime);
+        } else if (data.type === 'chat') {
+            appendMessage("Друг", data.text, "friend");
+        } else if (data.type === 'media_control') {
+            handleRemoteControl(data);
         }
     });
 }
 
-// 7. Управление плеером
+// ОСНОВНОЙ ФИКС ОКНА "ВОЙДИТЕ В АККАУНТ"
 function createPlayer(vId, startTime = 0) {
     document.getElementById('setup-screen').classList.add('hidden');
     document.getElementById('main-app').classList.remove('hidden');
 
     player = new YT.Player('yt-player', {
+        height: '100%',
+        width: '100%',
         videoId: vId,
+        host: 'https://www.youtube-nocookie.com', // Используем спец. домен для обхода
         playerVars: {
             'autoplay': 1,
             'controls': 1,
             'start': Math.floor(startTime),
             'rel': 0,
-            'origin': window.location.origin
+            'enablejsapi': 1,
+            'origin': window.location.origin, // Обязательно для работы API в Telegram
+            'widget_referrer': window.location.href
         },
         events: {
             'onStateChange': onPlayerStateChange
@@ -136,7 +113,6 @@ function createPlayer(vId, startTime = 0) {
 
 function onPlayerStateChange(event) {
     if (!activeConn || syncIgnore) return;
-
     const time = player.getCurrentTime();
     if (event.data === YT.PlayerState.PLAYING) {
         sendData({ type: 'media_control', action: 'play', time: time });
@@ -157,30 +133,25 @@ function handleRemoteControl(data) {
     setTimeout(() => { syncIgnore = false; }, 800);
 }
 
-// 8. Утилиты
 function extractVideoID(url) {
-    const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?v=)|(&v=))([^#&?]*).*/;
+    const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?v=)|(\&v=))([^#\&\?]*).*/;
     const match = url.match(regExp);
     return (match && match[8].length == 11) ? match[8] : false;
 }
 
 function sendData(obj) {
-    if (activeConn && activeConn.open) {
-        activeConn.send(obj);
-    }
+    if (activeConn && activeConn.open) activeConn.send(obj);
 }
 
 function sendMsg() {
     const input = document.getElementById('msg-input');
     const text = input.value.trim();
     if (!text) return;
-
     appendMessage("Вы", text, "me");
     sendData({ type: 'chat', text: text });
     input.value = '';
 }
 
-// Поддержка Enter в чате
 document.getElementById('msg-input')?.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') sendMsg();
 });
@@ -194,15 +165,12 @@ function appendMessage(user, text, style) {
     container.scrollTop = container.scrollHeight;
 }
 
-// Интеграция твоей ссылки GitHub Pages
 function inviteFriend() {
     const baseUrl = "https://kronos2008.github.io/Test1/"; 
     const inviteLink = `${baseUrl}?startapp=room_${peer.id}`;
-    
     if (navigator.clipboard) {
         navigator.clipboard.writeText(inviteLink).then(() => {
-            if (tg) tg.showAlert("Ссылка скопирована! Отправь другу.");
-            else alert("Ссылка скопирована!");
+            if (tg) tg.showAlert("Ссылка скопирована!");
         });
     } else {
         alert("Твоя ссылка: " + inviteLink);
