@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Cinema Party Tube</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="https://www.youtube.com/iframe_api"></script>
+</head>
+<body>
+    <div id="setup-screen" class="screen">
+        <div class="glass-card">
+            <h1 class="logo-text">Watch Together</h1>
+            <p class="sub-text">YouTube & Web Movies</p>
+            <div class="input-container">
+                <input type="text" id="video-url" placeholder="Ссылку на YouTube сюда...">
+                <button class="btn-main" onclick="startMovie()">Смотреть</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="main-app" class="screen hidden">
+        <div class="player-wrapper">
+            <div class="custom-close" onclick="location.reload()"></div>
+            <div id="yt-player"></div>
+        </div>
+
+        <div class="chat-container">
+            <div id="messages" class="chat-flow"></div>
+            <div class="chat-input-row">
+                <input type="text" id="msg-input" placeholder="Сообщение...">
+                <button class="btn-send" onclick="sendMsg()">➤</button>
+            </div>
+            <button class="btn-invite" onclick="inviteFriend()">Пригласить друга</button>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
