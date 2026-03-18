@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SoundPlay Premium</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <div class="bg-glow"></div>
+
+        <header class="header">
+            <div class="header-top">
+                <h1 class="logo">SoundPlay</h1>
+                <div class="user-badge" id="usersCount">Premium</div>
+            </div>
+        </header>
+
+        <main class="content-area">
+            <section id="page-top" class="page active">
+                <div class="welcome-block">
+                    <h2>Твоя волна</h2>
+                    <p>Лучшее из VK и Яндекс Музыки</p>
+                </div>
+                <div id="top-tracks" class="track-list"></div>
+            </section>
+
+            <section id="page-search" class="page">
+                <div class="search-bar">
+                    <input type="text" id="search-input" placeholder="Треки, артисты, альбомы..." autocomplete="off">
+                </div>
+                <div id="search-results" class="track-list"></div>
+            </section>
+
+            <section id="page-library" class="page">
+                <h2 class="section-title">Любимое</h2>
+                <div id="library-tracks" class="track-list"></div>
+            </section>
+        </main>
+
+        <div id="mini-player" class="mini-player hidden">
+            <div class="mp-progress-container">
+                <div id="mp-progress" class="mp-progress-bar"></div>
+            </div>
+            <div class="mp-content" id="open-full-player">
+                <div class="mp-cover" id="mp-cover-img"></div>
+                <div class="mp-info">
+                    <div id="mp-title" class="mp-title">Название</div>
+                    <div id="mp-artist" class="mp-artist">Исполнитель</div>
+                </div>
+                <div class="mp-actions">
+                    <button id="btn-play-pause" class="btn-play">▶</button>
+                </div>
+            </div>
+        </div>
+
+        <nav class="bottom-nav">
+            <button class="nav-btn active" data-target="page-top">
+                <span class="nav-icon">🏠</span>
+                <span>Главная</span>
+            </button>
+            <button class="nav-btn" data-target="page-search">
+                <span class="nav-icon">🔍</span>
+                <span>Поиск</span>
+            </button>
+            <button class="nav-btn" data-target="page-library">
+                <span class="nav-icon">❤️</span>
+                <span>Медиатека</span>
+            </button>
+        </nav>
+    </div>
+
+    <div id="full-player" class="full-player hidden">
+        <button id="close-full-player" class="close-btn">✕</button>
+        <div class="fp-body">
+            <div id="fp-cover" class="fp-cover"></div>
+            <div class="fp-info">
+                <h2 id="fp-title">Название трека</h2>
+                <p id="fp-artist">Артист</p>
+            </div>
+            <div class="fp-controls">
+                <button class="fp-btn secondary">⏮</button>
+                <button id="fp-play-pause" class="fp-btn main">▶</button>
+                <button class="fp-btn secondary">⏭</button>
+            </div>
+            <button id="btn-add-lib" class="btn-like">Добавить в медиатеку</button>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
