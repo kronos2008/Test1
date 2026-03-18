@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SoundPlay - Плеер</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="config.js"></script>
+    <script src="soundcloud.js"></script>
+    <script src="db.js"></script>
+</head>
+<body>
+    <div class="app player-view">
+        <div id="player-content"></div>
+        
+        <div class="bottom-nav">
+            <div class="nav-item" data-page="top">Топ</div>
+            <div class="nav-item" data-page="library">Медиатека</div>
+            <div class="nav-item" data-page="playlists">Плейлисты</div>
+            <div class="nav-item" data-page="search">Поиск</div>
+        </div>
+    </div>
+
+    <script>
+        let tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.backgroundColor = '#1A1A2E';
+        tg.headerColor = '#8A2BE2';
+        
+        let audio = null;
+        let currentTrack = null;
+        let isPlaying = false;
+        
+        document.addEventListener('DOMContentLoaded', async () => {
+            await db.init();
+            
+            // Получаем трек из URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const trackParam = urlParams.get('track');
+            
+            if (trackParam) {
+                currentTrack = JSON.parse(decodeURIComponent(trackParam));
+                renderPlayer();
+                initAudio();
+            }
+            
+            // Навигация
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    window.location.href = `index.html?page=${item.dataset.page}`;
+                });
+            });
+        });
+        
+        function renderPlayer() {
+            const container = document.getElementById('player-content');
+            
+            container.innerHTML = `
+                <div class="player">
+                    <div class="track-info">
+                        <h2>${currentTrack.title}</h2>
+                        <p>${currentTrack.artist}</p>
+                    </div>
+                    
+                    <div class="cover-art">
+                        ${currentTrack.artwork 
+                            ? `<img src="${currentTrack.artwork}" alt="cover">`
+                            : `<div class="placeholder-cover">🎵</div>`
+                        }
+                    </div>
+                    
+                    <div class="progress">
+                        <span class="time current" id="currentTime">0:00</span>
+                        <div class="progress-bar" onclick="seek(event)">
+                            <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                        </div>
+                        <span class="time total" id="totalTime">${currentTrack.duration}</span>
+                    </div>
+                    
+                    <div class="controls">
+                        <button class="control-btn" onclick="previous()">⏮️</button>
+                        <button class="control-btn play-pause" id="playPauseBtn" onclick="togglePlay()">▶️</button>
+                        <button class="control-btn" onclick="next()">⏭️</button>
+                    </div>
+                    
+                    <div class="actions">
+                        <button class="action-btn" onclick="addToLibrary()">
+                            <span>➕</span> Добавить в медиатеку
+                        </button>
+                        <button class="action-btn" onclick="playNext()">
+                            <span>⏩</span> Воспроизвести далее
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function initAudio() {
+            if (audio) {
+                audio.pause();
+            }
+            
+            audio = new Audio(currentTrack.stream_url);
+            
+            audio.ontimeupdate = () => {
+                const current = formatTime(audio.currentTime);
+                const progress = (audio.currentTime / audio.duration) * 100;
+                
+                document.getElementById('currentTime').textContent = current;
+                document.getElementById('progressFill').style.width = progress + '%';
+            };
+            
+            audio.onended = () => {
+                next();
+            };
+        }
+        
+        function togglePlay() {
+            if (!audio) return;
+            
+            if (isPlaying) {
+                audio.pause();
+                document.getElementById('playPauseBtn').textContent = '▶️';
+            } else {
+                audio.play();
+                document.getElementById('playPauseBtn').textContent = '⏸️';
+            }
+            
+            isPlaying = !isPlaying;
+        }
+        
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+        
+        function seek(event) {
+            if (!audio) return;
+            
+            const bar = event.currentTarget;
+            const clickPosition = (event.clientX - bar.getBoundingClientRect().left) / bar.offsetWidth;
+            audio.currentTime = clickPosition * audio.duration;
+        }
+        
+        async function addToLibrary() {
+            await db.addToLibrary(currentTrack);
+            tg.showAlert('✅ Трек добавлен в медиатеку');
+        }
+        
+        function playNext() {
+            tg.sendData(JSON.stringify({
+                action: 'play_next',
+                track: currentTrack
+            }));
+        }
+        
+        function previous() {
+            // В реальном приложении здесь логика предыдущего трека
+        }
+        
+        function next() {
+            // В реальном приложении здесь логика следующего трека
+        }
+    </script>
+</body>
+</html>
