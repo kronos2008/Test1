@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>MovieParty — смотрим кино вместе</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+    <div class="bg-particles"></div>
+    
+    <div id="app" class="app-container">
+        <!-- ЭКРАН ЗАГРУЗКИ -->
+        <div id="loading-screen" class="loading-screen">
+            <div class="loader"></div>
+            <div class="loading-text">Загрузка сеанса...</div>
+        </div>
+
+        <!-- ЭКРАН ВХОДА / СОЗДАНИЯ КОМНАТЫ -->
+        <div id="join-screen" class="screen active">
+            <div class="logo">🎬 MovieParty</div>
+            <div class="subtitle">Смотрите фильмы вместе с друзьями</div>
+            
+            <div class="join-buttons">
+                <button class="btn btn-primary" id="create-room-btn">
+                    <span class="btn-icon">➕</span>
+                    Создать комнату
+                </button>
+                
+                <div class="or-divider">или</div>
+                
+                <div class="invite-link-container">
+                    <input type="text" id="invite-link-input" class="invite-input" placeholder="Вставьте ссылку-приглашение">
+                    <button class="btn btn-secondary" id="join-by-link-btn">Присоединиться</button>
+                </div>
+            </div>
+            
+            <div class="user-info" id="user-info">
+                <span id="user-name">Загрузка...</span>
+            </div>
+        </div>
+
+        <!-- ОСНОВНАЯ КОМНАТА -->
+        <div id="room-screen" class="screen">
+            <!-- Верхняя панель -->
+            <div class="room-header">
+                <div class="room-info">
+                    <span class="room-status" id="room-status">🟢 В эфире</span>
+                    <span class="viewers-count" id="viewers-count">👥 1 зритель</span>
+                </div>
+                <div class="header-actions">
+                    <button class="icon-btn" id="invite-users-btn" title="Пригласить">
+                        <span>🔗</span>
+                    </button>
+                    <button class="icon-btn" id="room-settings-btn" title="Настройки">
+                        <span>⚙️</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ВИДЕО ПЛЕЕР (ВК Видео) -->
+            <div class="video-container">
+                <div id="video-player" class="video-player">
+                    <div class="video-placeholder" id="video-placeholder">
+                        <span class="placeholder-icon">🎬</span>
+                        <span class="placeholder-text">Выберите фильм для просмотра</span>
+                    </div>
+                </div>
+                
+                <!-- Элементы управления видео (только для админа) -->
+                <div class="video-controls" id="video-controls">
+                    <button class="control-btn" id="play-pause-btn">▶</button>
+                    <div class="progress-container">
+                        <div class="progress-bar" id="progress-bar">
+                            <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+                        </div>
+                        <span class="time-display" id="time-display">0:00 / 0:00</span>
+                    </div>
+                    <button class="control-btn" id="fullscreen-btn">⛶</button>
+                </div>
+            </div>
+
+            <!-- ПАНЕЛЬ ВЫБОРА ФИЛЬМА (только для админа) -->
+            <div class="movie-selector" id="movie-selector">
+                <div class="selector-header">
+                    <span>Выбрать фильм из ВК Видео</span>
+                    <button class="close-selector" id="close-selector">✕</button>
+                </div>
+                <input type="text" class="movie-search" id="movie-search" placeholder="🔍 Поиск фильмов...">
+                <div class="movie-list" id="movie-list">
+                    <!-- Фильмы будут загружаться сюда -->
+                    <div class="movie-item" data-url="https://vkvideo.ru/video-123456_78901234">
+                        <div class="movie-preview">🎬</div>
+                        <div class="movie-info">
+                            <div class="movie-title">Человек-паук: Нет пути домой</div>
+                            <div class="movie-duration">2ч 28мин</div>
+                        </div>
+                    </div>
+                    <div class="movie-item" data-url="https://vkvideo.ru/video-456789_12345678">
+                        <div class="movie-preview">🎬</div>
+                        <div class="movie-info">
+                            <div class="movie-title">Дюна: Часть вторая</div>
+                            <div class="movie-duration">2ч 46мин</div>
+                        </div>
+                    </div>
+                    <div class="movie-item" data-url="https://vkvideo.ru/video-789012_34567890">
+                        <div class="movie-preview">🎬</div>
+                        <div class="movie-info">
+                            <div class="movie-title">Интерстеллар</div>
+                            <div class="movie-duration">2ч 49мин</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ЧАТ и УЧАСТНИКИ (табы) -->
+            <div class="chat-container">
+                <div class="chat-tabs">
+                    <button class="tab-btn active" data-tab="chat">💬 Чат</button>
+                    <button class="tab-btn" data-tab="users">👥 Участники</button>
+                </div>
+                
+                <!-- Вкладка ЧАТ -->
+                <div class="tab-content active" id="chat-tab">
+                    <div class="messages-container" id="messages-container">
+                        <!-- Сообщения будут здесь -->
+                        <div class="message system">
+                            Добро пожаловать в комнату!
+                        </div>
+                    </div>
+                    
+                    <div class="message-input-container">
+                        <input type="text" class="message-input" id="message-input" placeholder="Написать сообщение...">
+                        <button class="send-btn" id="send-message-btn">➤</button>
+                    </div>
+                </div>
+                
+                <!-- Вкладка УЧАСТНИКИ -->
+                <div class="tab-content" id="users-tab">
+                    <div class="users-header">
+                        <span>Участники (<span id="users-count">1</span>)</span>
+                        <button class="add-user-btn" id="add-user-btn">➕ Пригласить</button>
+                    </div>
+                    <div class="users-list" id="users-list">
+                        <!-- Участники будут здесь -->
+                        <div class="user-item admin" data-user-id="admin">
+                            <div class="user-avatar">👤</div>
+                            <div class="user-name">
+                                <span id="current-user-name">Вы</span>
+                                <span class="user-badge admin-badge">Админ</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- МОДАЛЬНОЕ ОКНО ПРИГЛАШЕНИЯ -->
+        <div id="invite-modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Пригласить друзей</h3>
+                    <button class="close-modal" id="close-invite-modal">✕</button>
+                </div>
+                <div class="modal-body">
+                    <p>Ссылка для приглашения:</p>
+                    <div class="invite-link-box" id="invite-link-box">
+                        https://t.me/your_bot?start=room_123456
+                    </div>
+                    <button class="btn btn-small" id="copy-invite-link">Копировать</button>
+                    
+                    <div class="or-divider">или</div>
+                    
+                    <p>Поиск пользователя:</p>
+                    <div class="search-user">
+                        <input type="text" id="search-user-input" placeholder="Введите username">
+                        <button class="btn btn-small" id="search-user-btn">Найти</button>
+                    </div>
+                    <div id="search-result" class="search-result"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- МОДАЛЬНОЕ ОКНО НАСТРОЕК (для админа) -->
+        <div id="settings-modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Управление комнатой</h3>
+                    <button class="close-modal" id="close-settings-modal">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div class="setting-item">
+                        <label>Название комнаты</label>
+                        <input type="text" id="room-name-input" value="Комната MovieParty">
+                    </div>
+                    
+                    <div class="setting-item">
+                        <label>Кто может приглашать</label>
+                        <select id="invite-permission">
+                            <option value="admin">Только админ</option>
+                            <option value="all">Все участники</option>
+                        </select>
+                    </div>
+                    
+                    <div class="setting-item">
+                        <label>Кто может писать в чат</label>
+                        <select id="chat-permission">
+                            <option value="all">Все</option>
+                            <option value="admin">Только админ</option>
+                        </select>
+                    </div>
+                    
+                    <button class="btn btn-danger" id="end-session-btn">Завершить сеанс</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
